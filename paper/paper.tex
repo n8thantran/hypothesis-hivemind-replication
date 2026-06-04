@@ -1,0 +1,433 @@
+% === main.tex ===
+\documentclass{article}
+% if you need to pass options to natbib, use, e.g.:
+%  \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2026
+
+\usepackage[position, preprint]{neurips_2026}
+% After being accepted, the authors should add "final" behind the track to compile a camera-ready version.
+% 2. Position Paper Track
+% \usepackage[position, final]{neurips_2026}
+
+% to avoid loading the natbib package, add option nonatbib:
+% \usepackage[nonatbib]{neurips_2026}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc} % use 8-bit T1 fonts
+\usepackage{hyperref}  % hyperlinks
+\usepackage{url}   % simple URL typesetting
+\usepackage{booktabs}  % professional-quality tables
+\usepackage{amsfonts}  % blackboard math symbols
+\usepackage{nicefrac}  % compact symbols for 1/2, etc.
+\usepackage{microtype}  % microtypography
+\usepackage{xcolor}   % colors
+\usepackage{amsmath}
+
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{todonotes}
+\usepackage{graphicx}
+\usepackage{subcaption}
+
+\usepackage{tcolorbox}
+\usepackage{listings}
+\tcbuselibrary{listings,breakable}
+\usepackage{lipsum}
+
+\lstset{
+ basicstyle=\ttfamily\small,
+ breaklines=true,
+ columns=fullflexible,
+ keepspaces=true
+}
+
+\newcolumntype{P}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+
+% Note. For the workshop paper template, both \title{} and \workshoptitle{} are required, with the former indicating the paper title shown in the title and the latter indicating the workshop title displayed in the footnote.
+\title{Agentic AI Scientists Are Not Built For Autonomous Scientific Discovery}
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+\author{
+ Harshit Bisht$^1$, Vinay Kumar$^1$, Kevin Maik Jablonka$^{4,5,6}$, Mausam$^{1,2}$, N. M. Anoop Krishnan$^{1,3,*}$\\
+ $^1$ Yardi School of Artificial Intelligence, Indian Institute of Technology Delhi \\
+ $^2$ Department of Computer Science and Engineering, Indian Institute of Technology Delhi \\
+ $^3$ Department of Civil and Environmental Engineering, Indian Institute of Technology Delhi \\
+ $^4$ Laboratory of Organic and Macromolecular Chemistry (IOMC), Friedrich Schiller University Jena \\
+ $^5$ Center for Energy and Environmental Chemistry Jena, Friedrich Schiller University Jena \\
+ $^6$ Helmholtz Institute for Polymers in Energy Applications Jena (HIPOLE Jena) \\
+ $^*$ Correspondence to \href{mailto:krishnan@iitd.ac.in}{krishnan@iitd.ac.in}
+}
+
+% TODO Solution idea: Cloud based labs for experiments, create ontology for record keeping
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+A growing body of work pursues AI scientists capable of end-to-end autonomous scientific discovery. This position paper argues that although they already function as co-scientists, \textbf{agentic AI scientists are not built for autonomous scientific discovery}. We identify the following challenges in building and deploying autonomous AI scientists: (1) Problem selection is influenced by the McNamara fallacy; (2) Agents are built on large language models (LLMs) whose training corpora omit tacit procedural and failure knowledge of laboratory practice; (3) Preference optimisation during post-training compresses output diversity toward consensus; and (4) Most scientific benchmarks measure single-turn prediction accuracy and lack feedback from physical experiments back to the computational model. These challenges are not just questions of scale and scaffolding; they require revisiting fundamental design choices. To build truly autonomous AI scientists, we recommend the use of scientific simulations as verifiers for training, the design of persistent world models that represent the shifting objectives governing real investigations, the establishment of a centralized preregistration repository for all AI-generated hypotheses, and application driven by scientific need rather than tool affordance.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+
+\begin{quote}
+\textit{``In general, we look for a new law by the following process.
+First, we guess it; then we compute the consequences of the
+guess and then we compare the result of the computation to
+nature, with experiment or experience.
+If it disagrees with experiment, it is wrong.
+In that simple statement is the key to science.''}\\[4pt]
+\hfill---\,Richard P. Feynman (1964)
+\end{quote}
+
+One of the ways science is defined is the interrogation of nature through a cycle of conjecture, prediction, and physical verification. What distinguishes scientific reasoning from other forms of structured reasoning is precisely this closing of the loop against experiment; the willingness to be proven wrong by nature. Artificial intelligence (AI) has begun to participate meaningfully in this enterprise~\citep{wangScientificDiscoveryAge2023,novikov2025alphaevolve0}. Across the natural sciences, AI systems have accelerated the processing of large experimental datasets~\citep{dagdelen_structured_2024}, made progress towards automated tool-use and laboratories~\citep{Darvish2025organa, aila}, uncovered latent structure in complex biological and chemical spaces~\citep{jumperHighlyAccurateProtein2021}, and reduced the time from hypothesis to computational candidate in domains ranging from drug discovery~\citep{coleyAutonomousDiscoveryChemical2020, coleyAutonomousDiscoveryChemical2020a} to materials design~\citep{zeniGenerativeModelInorganic2025,miret2025enabling,jain2013commentary,ahlawat_family_2026}.
+
+Against this backdrop, a stronger proposition has gained traction: that large language model (LLM) based agentic systems can conduct natural science \emph{autonomously}. A growing body of systems now claims to automate the key intellectual steps of the scientific process: selecting problems worth pursuing, forming and revising hypotheses, designing and executing experiments, and communicating results, all without meaningful human involvement~\citep{kitanoNobelTuringChallenge2021,gottweis2025towards,mitchenerKosmosAIScientist2025,luEndtoendAutomationAI2026,ghareebRobinMultiagentSystem2025,yamadaAIScientistv2WorkshopLevel2025,ghafarollahiSciAgentsAutomatingScientific2025,Boiko2023autonomous}. Major funding bodies are directing resources toward autonomous AI researchers~\citep{GenesisMissionNational2026, ARIA}; benchmark performance on scientific tasks is being cited as evidence of near-human scientific capability; and the Nobel Turing Challenge frames the aspirational endpoint as an AI system capable of foundational discovery in the natural sciences~\citep{kitanoNobelTuringChallenge2021}. If the
+claim is correct, the organisation of scientific research faces genuine transformation. If it is not, then the mismatch between the framing and the actual capability carries costs---for how systems are evaluated and scientific effort is allocated.
+
+Here, we argue that \textbf{current agentic systems are not built for autonomous natural science}---not because current systems lack scale or tooling, but because the shortcomings are \emph{inherent} to the training and deployment strategy. We identify several challenges in building autonomous AI scientists, all the way from problem selection to application. The position advanced here is not that AI systems should be removed from scientific workflows---they are useful as a \emph{co-scientist}: a capable collaborator that extends human scientific judgement rather than displacing it~\citep{bianchiExploringUseAI2026}. This is exemplified by AI systems' success in problems that are well-stated by humans, primarily requiring optimisation in a well-defined problem space, where constraints are a priori defined, and the outcomes are verifiable. The key contributions of the paper are as follows:
+\begin{itemize}
+ \item We identify challenges along four themes (detailed in Sections~\ref{sec:problem_selection}--~\ref{sec:evaluation}) that preclude autonomous scientific discovery: the McNamara fallacy in problem selection, the absence of tacit and failure knowledge from training corpora, diversity compression induced by preference optimisation, and the invalidity of current scientific benchmarks.
+ \item We provide empirical evidence for diversity compression through the \textit{hypothesis hivemind} experiment, showing that frontier models from independent providers converge semantically on both interpretive and open-ended hypothesis generation tasks.
+ \item We outline several potential solutions to address these challenges and potentially realize AI scientists in Section~\ref{sec:agenda}.
+\end{itemize}
+
+\section{Challenges in autonomous discovery}
+\label{sec:challenges}
+
+The aspiration to automate scientific discovery predates modern AI by several decades \citep{lindsayDENDRALCaseStudy1993, langley1977bacon, king2009robot} %(see Appendix~\ref{sec:oldscientist} for a detailed history)
+. LLM-based agentic systems have renewed this ambition at a different scale. AI systems have proposed a drug candidate for dry age-related macular degeneration~\citep{ghareebRobinMultiagentSystem2025}, produced scientific reports spanning multiple domains in a single turn~\citep{mitchenerKosmosAIScientist2025,ghafarollahiSciAgentsAutomatingScientific2025}, and generated millions of candidate crystal structures, compressing what would have been decades of screening into days~\citep{merchantScalingDeepLearning2023a,zeniGenerativeModelInorganic2025}. However for each of these examples, human researchers still specified the problem, provided the dataset, and defined the criteria for success. We argue that this division of labour is not merely a short-term limitation fixable with scale but reflects design choices that don't fully reflect the spirit of scientific inquiry. Table~\ref{tab:gap_analysis} outlines a summary of the specific challenges that any system aspiring toward autonomous discovery must solve. Sections~\ref{sec:problem_selection}--\ref{sec:evaluation} take each row in turn and examine why the gap exists in the present paradigm.
+
+To ground our arguments, we discuss the search for solid-state battery electrolytes (SSE) with high ionic conductivity and electrochemical stability as a running example. SSE is one of the most impactful and well-studied problems at frontier of energy storage research~\citep{dutraUnderstandingSolidstateBattery2025}. The atomistic mechanisms governing ion transport in solid electrolytes remain incompletely understood, meaning no ground-truth objective function exists to optimize against. Progress demands coherent reasoning across scales---from quantum-mechanical density functional theory calculations, through molecular dynamics simulations capturing diffusive ion motion, to device-scale electrochemical models---each with its own intricacies. Finally, realizing the computationally designed electrolyte in laboratory setting presents unique challenges including synthesizability, processability, and device-scale manufacturing. The complexity and urgency of the task make it a good backdrop to understand the challenges we outline.
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\caption{The contrast between desired and current behaviour corresponding challenges in building AI scientists. Each row covers the challenges around a central theme analyzed in greater detail in Sections~\ref{sec:problem_selection}--\ref{sec:evaluation}. The solid-state electrolyte (SSE) discovery problem serves as the running case study.}
+\label{tab:gap_analysis}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{m{0.12\textwidth} m{0.25\textwidth} m{0.24\textwidth} m{0.32\textwidth}}
+\toprule
+\textbf{Challenge} &
+\textbf{Desired behavior} &
+\textbf{Current paradigm} &
+\textbf{Gap, illustrated on SSE discovery} \\
+\midrule
+
+\textbf{Problem selection} & Identify questions that are field bottlenecks, integrating significance, tractability, and resource constraints & Select problems that are measurable, data-rich, and benchmark-amenable~\citep{haoArtificialIntelligenceTools2026} & Optimising ionic conductivity over interfacial stability, manufacturability, recyclability, and environmental impact is a human choice the system simply inherits \\
+
+\addlinespace[1pt]
+
+\textbf{Data bias} & Additional knowledge of which procedures work in practice and which approaches have been abandoned & Published literature, which records conclusions but omits tacit and failure knowledge~\citep{fanelliNegativeResultsAre2012} & Several top-ranked AI candidates for SSEs are known to be unsynthesizable through unpublished tacit knowledge~\citep{merchantScalingDeepLearning2023a} \\
+
+\addlinespace[1pt]
+
+\textbf{Diversity} &
+Generate responses departing from prevailing consensus when the evidence warrants it & Compress outputs toward consensus through preference optimisation~\citep{kirkUnderstandingEffectsRLHF2023} & Convergence on LLZO and NASICON-family candidates rather than exploring under-represented or novel chemistries \\
+
+\addlinespace[1pt]
+
+\textbf{Benchmarking} &
+Measure whether systems can weigh competing objectives and reason across extended investigations & Single-turn prediction accuracy on tasks vulnerable to leakage~\citep{kapoorLeakageReproducibilityCrisis2023} & High conductivity prediction scores are no indication of navigating the full discovery cycle from candidate proposal through synthesis and characterisation\\
+
+\addlinespace[1pt]
+
+\textbf{Inference \&} \textbf{physical} \textbf{validation} & Counterfactual reasoning, anomaly-driven belief revision, and feedback from physical results to computational models & Execute workflows but revise beliefs in only limited cases~\citep{rios-garciaAIScientistsProduce2026}; almost entirely in silico & A discrepant conductivity measurement should potentially revise the assumed transport mechanism; current systems discard this as noise or an outlier\\
+
+\bottomrule
+\end{tabular}
+
+\end{table*}
+
+\section{Problem selection: McNamara fallacy in AI-driven science}
+\label{sec:problem_selection}
+
+Problem selection is categorically different from problem solving, it involves judgment that integrates theoretical significance, practical tractability, community need, resource constraints, and the innate human need to understand the universe in ways that resist formal specification~\citep{nicklesScientificDiscoveryLogic1980,polanyiTacitDimension1966}. In Section~\ref{sec:challenges} we stated that current AI scientists rely on human judgement for problem selection, here we extend the argument by showing that the presence of AI technologies negatively impact the human judgement they rely on.
+
+The McNamara or Quantitative fallacy describes what happens when institutions face complex problems full of intangibles: They measure what is easy to measure, disregard what cannot be quantified, presume the unmeasured is unimportant, and finally declare that the unmeasured does not even exist~\citep{yankelovich1972corporate,omahony_medicine_2017}. AI techniques rely on numerical signals such as losses, rewards, or fitness values for optimization and evaluation of the final system, which naturally pushes research projects involving AI toward problems that can be quantified. In addition, machine learning techniques often require large amounts of data in a format that's easy to manipulate computationally, further reducing the span of problems amenable to AI solutions. This effect is already documented in scientific research. Across 41.3 million research papers, \citet{haoArtificialIntelligenceTools2026} found that AI-augmented scientists publish 3.02 times more papers and receive 4.84 times more citations, yet AI adoption shrinks the collective volume of scientific topics studied by 4.63\% and reduces scientist-to-scientist engagement by 22\%. The tools accelerate established fields leading to a narrower set of questions being asked, while genuinely hard, data-sparse problems go untouched.
+
+Problem selection can be understood via the tension between \emph{technology-push} and \emph{demand-pull} innovation~\citep{distefanoTechnologyPushDemand2012}. In a technology-push regime, a highly-capable tool defines the agenda: researchers ask what can be done with it and search for amenable problems. In a demand-pull regime, researchers ask what is needed and build accordingly. The current AI deployment in science seems almost entirely technology-push. The SSE discovery problem illustrates where this leads. We have systems such as MatterGen~\citep{zeniGenerativeModelInorganic2025} which can generate candidate inorganic materials optimised toward any specified property constraint. The decision of which constraint to specify---ionic conductivity, interfacial stability, electrochemical window, or manufacturability in high-volume production---is not a conclusion the system reaches. Domain scientists must judge which bottleneck in solid-state battery science is currently most limiting and what experimental infrastructure is available to validate candidates before invoking AI tools. AI scientists must be trained to avoid relying on external problem selection mechanisms for performing autonomous discovery.
+
+\section{Data bias: gaps in the training corpus}
+\label{sec:pretraining}
+
+Scientific publishing filters for some scientific knowledge over other: either by design or bias in the peer-review process. It selects for conclusions over process, for positive results over negative ones, and for ideas consistent with prevailing theory over those that challenge it. A model trained on this corpus does not inherit a snapshot of scientific knowledge but the output of that filter. Two categories of removal matter most, and neither can be recovered by training on more of the same data.
+
+\textbf{Tacit knowledge} Laboratory practice produces understanding that is rarely written down: which synthesis conditions are reliable, which reagents behave inconsistently across suppliers, which reported protocols require undocumented adjustments, and which measurements carry signatures of known experimental artifacts. \citet{polanyiTacitDimension1966} argued that this kind of knowledge is irreducibly non-propositional; an experienced researcher can recognise a result that looks too clean or a curve with the wrong shape, but cannot fully articulate the basis for that recognition that could be published or trained upon~\citep{fjellandWhyGeneralArtificial2020}. In SSE research, the tacit record includes which garnet-type synthesis routes consistently produce secondary phases under laboratory conditions that the published protocol does not acknowledge, which ionic conductivity measurements are artefacts of sample geometry rather than bulk material properties, and which candidate families have been screened and quietly set aside by multiple groups without a negative result ever appearing in print. A model trained on the published SSE literature sees the cleaned-up outputs of these decisions without any of the reasoning that produced them.
+
+\textbf{Failure knowledge} Publication bias removes negative results from the corpus~\citep{fanelliNegativeResultsAre2012}. Further, the iterative cycle of anomaly identification, tentative re-framing, targeted follow-up experiment is not documented even when it eventually produces a publishable result. Models trained on the final paper have no access to these explored and abandoned paths through the hypothesis space. \citet{raccuglia2016machine} demonstrated that a machine learning model trained on previously unpublished failed synthesis attempts outperformed models trained on the published literature alone in predicting conditions for synthesising new vanadium selenite compounds. \citet{dingGenerativeAILacks2025} demonstrated another effect of missing failed tests in the training corpus, LLMs in simulated discovery settings could extend known results incrementally, but consistently failed to detect anomalies indicating that a prior hypothesis should be abandoned. We conclude that a corpus filtered for successful conclusions cannot teach how and when to abandon a hypothesis, an essential skill for autonomous discovery.
+
+There is a third, more fundamental problem with training on a fixed corpus of publications. Statistical learning generalises to new samples from the training distribution. The most important results are out-of-distribution events in the space of scientific knowledge. A model trained on the published literature learns the consensus of the field as its prior, biasing it against disruptive suggestions that are too dissimilar to current consensus. This does not prevent cross-domain synthesis such as \citet{shannonMathematicalTheoryCommunication1948}, LLMs can retrieve information in the literature of two disconnected fields and establish a connection across disciplinary boundaries. However the discovery of ideas in direct contradiction of the training corpus becomes unlikely. Shechtman observed a diffraction pattern with five-fold rotational symmetry in 1982 even though the established crystallographic restriction theorem classified it as a physical impossibility for periodic crystals. The finding was met with hostility by the community for several years, a statistical model would have likely discarded the finding for disagreeing with its training corpus. The anomaly was finally resolved by the existence of quasi-periodic crystals, and Shechtman received the Nobel prize in Chemistry 29 years after the original discovery~\citep{shechtmanQuasiPeriodicCrystalsLong2013}.
+ 
+\section{Diversity: preference optimisation compresses the hypothesis space}
+\label{sec:posttraining}
+
+The drawbacks documented in Sections~\ref{sec:problem_selection} and~\ref{sec:pretraining} arise before a model generates a single output. A third challenge is introduced during post-training for alignment: reinforcement learning from human feedback (RLHF) and direct preference optimisation (DPO) adjust model outputs toward responses that are familiar, coherent, and consistent with what the human annotators believe. \citet{kirkUnderstandingEffectsRLHF2023} showed these procedures measurably shrink the diversity of the output distribution toward annotator consensus. For scientific hypothesis generation, it is the wrong objective: the annotator preferences that shape the output distribution are products of the same published consensus that the pre-training corpus encodes.
+
+\citet{bellemare-pepinDivergentCreativityHumans2026} noted that state-of-the-art LLMs score below the mean of the top half of human participants on divergent association tasks measuring access to semantically remote concepts. This is the cross-domain reach that \citet{dunbarHowScientistsReally1995} identified as the primary driver of hypothesis revision in scientific practice. Even carefully designed post-training pipelines can get exposed to this bias through model distillation. \citet{cloudLanguageModelsTransmit2026} demonstrated that a teacher model's systematic tendency was faithfully acquired by a student trained solely on number sequences the teacher generated, with the bias invisible in any individual output. A model distilled from a preference-optimised teacher inherits both the diversity compression and any additional biases the teacher developed, with no mechanism to detect or correct for either. The problem then compounds across generations as AI-assisted literature increasingly populates future training corpora. As demonstrated by \citet{shumailovAIModelsCollapse2024}, training on AI-generated text degrades distributional tails and contracts output diversity across successive model generations, adding to the issue.
+
+On the SSE task, the issues outlined in Sections~\ref{sec:pretraining} and~\ref{sec:posttraining} together make it extremely unlikely that AI systems asked to generate candidate hypotheses for improving lithium-ion conductivity in solid-state electrolytes will generate responses outside the well-known LLZO and NASICON families. These materials dominate the published literature and thus are highly represented in the model's priors. Scientific annotators for post-training are also likely to be familiar with the same literature which pushes the posterior after RLHF/DPO further towards them. These effects make it unlikely that AI systems trained this way will produce hypotheses that challenge the status quo.
+
+\subsection*{Empirical evidence: the hypothesis hivemind}
+\label{subsec:hivemind}
+To test whether these theoretical predictions manifest in practice, we designed an experiment grounded in the dual-search framework of \citet{klahrDualSpaceSearch1988} and inspired by the \textit{Hivemind} hypothesis \citep{jiangArtificialHivemindOpenEnded2025}. We posed two tasks to multiple frontier models from independent providers (Anthropic and OpenAI). We used 50 publications in the NeurIPS 2025 AI4Mat track as the dataset~\ref{app:dataset}. In the first task, models received a summary of experiments for a paper and were asked to recover the underlying hypothesis, an interpretive task with a determinate answer serving as a convergence baseline. In the second, models received the full paper text and were asked to generate new hypotheses to extend the work. We expected the open-ended nature of the second task to produce significantly more diverse outputs than the first. We generated multiple outputs per model for each task and embedded them following \citep{jiangArtificialHivemindOpenEnded2025}'s methodology. Finally, we compared the cosine-similarity of model output embeddings for both tasks.
+ 
+Figure~\ref{fig:comparison} (A) shows that similarity measures are high for the interpretive baseline, confirming that the embedding space detects semantic proximity when it is present. The critical result appears in Figure~\ref{fig:comparison} (B): inter-model similarities remain high despite the desired diversity in task outputs. A research community that queries multiple AI systems for novel hypotheses is, from an epistemic standpoint, effectively sampling from a single model. For the running example of SSE, this means that consulting multiple frontier models when deciding which electrolyte candidates to synthesise would produce recommendations concentrated in the same families from each system independently. Synthesis and characterisation resources flow toward the region of candidate space the published literature already emphasises, while underrepresented chemistries and unconventional transport mechanisms receive no additional attention from any model queried. The effective epistemic sample size, for generating directions the field has not already taken, is close to one regardless of how many systems are consulted. Section~\ref{sec:evaluation} asks what happens when these accumulated failures meet the evaluation frameworks intended to detect them. See Appendix~\ref{sec:hivemind} for a detailed description of the experiment.
+
+\begin{figure}[t]
+ \centering
+ \begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{plots/heatmap_A.pdf}
+ \end{subfigure}
+ \hfill
+ \begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{plots/heatmap_B.pdf}
+ \end{subfigure}
+ \caption{\textbf{Inter-provider output similarity remains consistently high, independent of the desired level of generative variety.} (A) Convergence desired: Heatmap of average cosine similarities of model output embeddings when asked to generate underlying hypothesis in response to experiment summaries. (B) Diversity desired: Heatmap of average cosine similarities of model output embeddings when asked to generate novel hypothesis in response to full publication text.}
+ \label{fig:comparison}
+\end{figure}
+
+\section{Evaluation, inference, and physical validation}
+\label{sec:evaluation}
+
+Science is judged against what happens in physical reality. This section describes the problems when autonomous systems are evaluated, deployed, and applied to science research.
+
+\subsection{What benchmarks measure}
+\label{subsec:benchmarks}
+\textbf{Construct validity} of a benchmark denotes if high performance on a benchmark reflects the desired capability~\citep{cronbachConstructValidityPsychological1955,eriksson2025can}. \citet{asadiMIRAGEIllusionVisual2026} showed that a fine-tuned models achieved top scores on chest X-ray VQA benchmarks without an image input. While the precise mechanism due to which this happens is unknown, it is very likely that the examples selected for the benchmark had some language pattern exploited by the model, similar to the predictive value of information encoded in image backgrounds~\citep{xiao_noise_2020}. \citet{thaisAIScienceNeeds2026} document contradictory performance in \textsc{CORE-Bench Hard} and \textsc{ReplicationBench}, two methodologically similar benchmarks, implying that at least one of them does not sufficiently align with the desired capability. Data leakage is another concern. \citet{kapoorLeakageReproducibilityCrisis2023} surveyed 294 papers across 17 fields and found that correcting for eight common leakage types collapsed the apparent advantage of complex ML models over classical baselines.
+
+\textbf{Ecological validity} represents to what extent the tasks in a benchmark resemble real workflows~\citep{brunswikPerceptionRepresentativeDesign1956, eriksson2025can}. Scientific exploration is not single-turn, scientists explore many questions whose content depends on previous answers. Often, answers lead to the revision of the candidate list, experimental strategy, and the relative weight placed on different properties as information accumulates across weeks or months. No current benchmark captures this structure. Most reward a correct prediction on a single turn; none rewards a system for recognising that the prediction should alter the next question, or for maintaining a coherent investigative thread as objectives shift. This is further exemplified by \citet{rios-garciaAIScientistsProduce2026}'s evaluation across more than 25,000 agent runs and eight scientific domains. They found that evidence was ignored in 68\% of traces, refutation-driven belief revision occurred in only 26\% of cases, and the base model rather than the agentic scaffold accounted for 41.4\% of explained variance in behaviour.
+
+\subsection{Reasoning across an investigation}
+\label{subsec:inference}
+The difference between scientific reasoning and exhibited model behaviour is more fundamental than benchmark validity. A working scientist treats counterfactual interrogation as a default. This disposition requires active cultivation~\citep{wasonFailureEliminateHypotheses1960}; humans themselves fail to apply it spontaneously without training. The operational core of \citet{popperLogicScientificDiscovery1959}'s falsificationism is the question a scientist asks of any result, including a favourable one: what would the evidence look like if my hypothesis were wrong? These questions are the trained default after years in a community of practice \citep{plattStrongInference1964}. Generating text conditioned on a counterfactual premise on being prompted is a different operation. Current reasoning models supported by agentic harnesses do not currently exhibit this capability of counterfactual reasoning~\citep{rios-garciaAIScientistsProduce2026}.
+
+A scientific investigation also operates with shifting objectives. It is difficult to collapse this multi-objective structure into a single scalar reward, and reward specification is the central challenge in agentic AI~\citep{Jablonka2021,amodeiConcreteProblemsAI2016,kalinin2026bringing}. The appropriate reward function is not just difficult to specify apriori, it is non-stationary and changes in response to information that becomes available through the investigation. Taken together, we see that experiments that generate anomalous results as discussed in Sections~\ref{sec:pretraining} and~\ref{sec:posttraining} are likely to be discarded in a single-objective setting rather than treated as information for revising the reward signal.
+
+Both points show up concretely in the SSE example. A researcher who obtains a computational prediction of high ionic conductivity does not proceed directly to synthesis, they check if the predicted conductivity is an artefact of the simulation assumptions---the interatomic potential or the choice of density functional, whether the boundary conditions inflate bulk transport figures relative to a polycrystalline sample, missing physical mechanisms such as grain boundary resistance, secondary phase formation during sintering, dendrite penetration at the electrolyte-anode interface which are likely to degrade performance. A system optimising a fixed scalar reward such as agreement between simulation and experiment might discard a candidate material that performs significantly worse in experiments than simulation instead of using it to improve their simulation methodology.
+
+\subsection{From computation to physical reality}
+\label{subsec:sim2real}
+These failures in evaluation and inference set the conditions for the final gap: between what AI systems predict and what physical experiment confirms. The strongest demonstrations of AI scientific capability currently operate primarily in computational representations such as predicting crystal structures, proposing molecular candidates, and simulating protein folding~\citep{merchantScalingDeepLearning2023a, jumperHighlyAccurateProtein2021}.
+
+When \citet{cheethamArtificialIntelligenceDriving2024a} evaluated the crystal structures proposed by GNoME against novelty relative to known compounds, synthesizability with current technology, and practical utility for real applications. The overwhelming majority failed at least one criterion. Of the 2.2 million predicted structures, 736 had been independently experimentally realized at the time of publication. The intention is not to cite GNoME as an isolated example, but to highlight a pattern of generative models for materials that routinely omit feasibility constraints from their objectives. Across SSE discovery efforts, examples of computational candidates carried through to experimental validation at any scale remain scarce.
+
+The in silico–in vitro performance gap cannot be closed by systems that treat steps of scientific discovery as independent prediction targets. The knowledge that bridges steps is relational and only becomes visible in the movement between them. Whether a predicted SSE composition is synthesizable from available precursors under achievable conditions relies on the tacit knowledge of synthesis practice described in Section~\ref{sec:pretraining}. Physical measurement adds a further layer of the same problem: an impedance spectrum does not arrive labelled, and reading off the separate contributions of bulk transport, grain boundary resistance, and electrode contact artefacts requires the kind of expertise that experienced researchers carry without writing down. Finally, physical results must feed back to revise the computational models that generated the predictions in the first place, a loop that current agentic systems have no mechanism to close.
+
+\section{Alternative views}
+\label{sec:alternative}
+
+\textbf{\textit{Scale and scaffolding will close the autonomy gap.}} Improvements in context length, retrieval reliability, and tool-use accuracy will improve capabilities but the failures described in this paper sit upstream of these properties. The bias towards measurable problems is not resolved by improved technical capabilities. The absence of tacit and failure knowledge from training corpora is a consequence of publishing norms and standards, and exposure to significantly more positive results will not teach the insights from the ones unavailable since they are qualitatively different. The distributional convergence documented in Section~\ref{subsec:hivemind} follows from the preference optimisation objective; a scaled-up model trained toward annotator consensus is likely to converge on the same region of hypothesis space at higher fluency. Experiments show that agentic scaffolding also fails to correct for this~\citep{rios-garciaAIScientistsProduce2026}.
+
+\textbf{\textit{Demonstrated successes like AlphaFold and GNoME show that full autonomy is within reach.}} On the contrary, these contributions exhibit the boundary the paper is trying to draw. AlphaFold solved a problem formally stated for fifty years, with an unambiguous evaluation criterion available at experimental scale. GNoME searched a compositional space against a computable stability criterion. In both cases, human researchers specified the objective, defined the validation criterion, and interpreted what the result meant for subsequent work. Extrapolating these successes to autonomy requires assuming that the judgment currently supplied by humans is either unnecessary or reproducible by the same paradigm. Neither assumption is supported by the evidence. \citet{bianchiExploringUseAI2026} found that the highest-quality scientific outputs in a controlled study came from meaningful human-AI collaboration, with quality declining under full automation. The successes of the current paradigm are an argument for investing in the co-scientist model, not for replacing the human half of it.
+
+\textbf{\textit{The distinction between co-scientist and autonomous scientist collapses as systems improve.}} If human oversight becomes increasingly nominal as capability grows, co-scientist might be a label applied to a workflow that is functionally autonomous. We argue that human involvement will not diminish randomly or uniformly, it will recede in precisely those aspects where the problems we identify are addressed. The harder question is what the improvements would look like, and we have already addressed the view that scale alone closes these gaps. The gaps that remain are not ones where more capability of the current kind is sufficient; they require different design commitments. Until those are in place, the co-scientist model is an accurate description of what the collaboration requires: human judgment that supplements models where they are the most limited.
+
+\textbf{\textit{Human scientists are also biased, limited, and frequently wrong.}} Individual human scientists are subject to confirmation bias, motivated reasoning, and the same consensus pressures that preference optimisation encodes \citep{wasonFailureEliminateHypotheses1960}. We believe the relevant comparison is between an AI system and the collective enterprise of science with corrective mechanisms such as peer review, replication requirements, adversarial collaboration, and reputational accountability for error developed over decades~\citep{longinoScienceSocialKnowledge1990}. A researcher who is wrong about a hypothesis faces replication attempts and critical commentary; but the convergence documented in Section~\ref{subsec:hivemind} means that querying additional AI systems is unlikely to apply the same corrective pressure.
+
+\section{Toward autonomous AI scientists}
+\label{sec:agenda}
+
+\textbf{Public reviews for papers and proposals to train scientific judgment.} An autonomous scientific AI must be able to identify which questions are worth pursuing without explicit instruction. This requires a representation of scientific value that goes beyond what benchmarks can operationalise: an understanding of what constitutes a genuine field bottleneck, how theoretical significance and practical tractability trade off, and when a question is too well-answered to be worth pursuing further. The first step towards models capable of scientific judgement must be public data of it being exercised, such as open peer review~\citep{wolframOpenPeerReview2020}. Public reviews of research proposals will be even more impactful as records of evaluating scientific ideas on merit and impact without access to experiment results. We recognise that using such data for training involves legitimate concerns around reviewer consent, privacy, and copyright which must be addressed before such data is used in building systems.
+
+\textbf{Public preregistration of AI generated hypothesis and validation experiments.} Preregistration of hypothesis~\citep{nosekPreregistrationRevolution2018} before experimentation is mandatory in clinical trials, owing to the risk of public health and life from false positives \citep{angelisClinicalTrialRegistration2004, opensciencecollaborationEstimatingReproducibilityPsychological2015}. It has found less acceptance in other domains of science due to the additional work for research teams. We outline several reasons it is important, easy to implement, and impactful for the AI scientist paradigm.
+
+Selective reporting and post-hoc analysis, colloquially described as ``p-hacking'' or ``post-diction'' are endemic to human science~\citep{ioannidisWhyMostPublished2005, simmonsFalsepositivePsychologyUndisclosed2011}. Agentic AI systems running automated hypothesis generation and testing loops at scale can amplify it by orders of magnitude, generating confirmatory results at a rate the peer review system was not designed to absorb. We propose that AI scientists be required to register hypotheses in a structured, machine-readable repository before any simulation or automated laboratory test is initiated. Unlike human researchers, this is easy to implement via an API call in the experimental pipeline making circumvention a deliberate act against scientific integrity. The repository can further serve as training data for two independent issues. The accumulated record of hypothesis and unsuccessful attempts to validate them will encode the failure knowledge described in~\ref{sec:pretraining}. The distribution of hypotheses generated by a community of AI scientists can also serve as a diversity and anti-redundancy training signal, creating a tractable objective for training the next generation of AI scientists to expand collective epistemic diversity. We acknowledge the challenges of generating consensus and compliance towards a repository with one centralized schema, but we believe the advantages we outline make it a worthwhile pursuit.
+
+\textbf{Training corpora must encode what publishing discards.} The data bias documented in Section~\ref{sec:pretraining} cannot be corrected by training on more published literature. The tacit knowledge of laboratory practice and the failure knowledge accumulated through unpublished dead ends are absent from the published corpus by design, not by omission. Closing this gap requires 
+different data sources. For tacit knowledge, the most promising direction is documenting the laboratory process such as video records of experimental procedures annotated by experienced researchers. This is expensive to generate and difficult to standardise, but it encodes knowledge that no text corpus contains. There have already been preliminary steps to build community resources in this direction such as~\citet{teytelmanProtocolsioVirtualCommunities2016}, further efforts to build open laboratory datasets of this kind would represent a qualitative shift in what training data for scientific AI can encode.
+
+In addition to the suggestions of a public pre-registration dataset, training on failure knowledge requires changes in the incentive structure of scientific publishing. Journals that accept negative results, funding bodies that require deposition of failed experimental records, and community norms that treat documented failure as a scientific contribution rather than a career liability will help train better AI scientists. The AI community cannot generate this infrastructure alone, but it can make the case for why it is necessary, and build the tools needed to use it once it exists.
+
+\textbf{Post-training that preserves diversity of ideas.} The convergence documented in Section~\ref{subsec:hivemind} follows from optimising toward annotator consensus. Recent work such as~\citet{chakrabortyMaxMinRLHFAlignmentDiverse2024, yaoNoPreferenceLeft2024} has attempted to modify the RLHF paradigm to have the post-trained model outputs match the full distribution of annotator responses. These techniques in combination with a large number of expert annotators can steer AI scientists towards generating diverse hypotheses.
+
+\textbf{Simulators as scalable verifiers for scientific reasoning.}
+The scientific community has built detailed simulation environments: molecular dynamics packages such as OpenMM~\citep{eastmanOpenMM8Molecular2024} and GROMACS~\citep{abrahamGROMACSHighPerformance2015} and physics engines such as MuJoCo~\citep{todorovMuJoCoPhysicsEngine2012} attempt to bridge the simulation-to-reality gap outlined earlier. These simulators are underexploited as training oracles for scientific AI, and can serve as sources of tacit and failure knowledge. Training on synthetic simulator data has shown to improve performance on International Physics Olympiad problems with zero-shot transfer to real benchmarks~\citep{prabhudesai_solving_2026}. Unlike RL pipelines trained on fixed corpora, where asymptotic saturation is a documented risk, simulator queries can be diversified indefinitely sustaining improvement without a data ceiling~\citep{devvrit_art_2025}.
+
+\textbf{Autonomous science requires persistent world models.} For LLM-based AI scientists, the context window is read-only across steps and cannot be transferred between agents or sessions. Scientific discovery requires an explicit, mutable representation of the agent's epistemic state that persists across the full arc of an investigation. One possible implementation is a Bayesian network over hypotheses and observations where each node carries a posterior updated with experimental results, with new hypothesis nodes created in response to anomalies. Any adequate world model must support uncertainty propagation across dependent beliefs and experiment selection by expected information gain. Meeting these requirements will likely demand integrating structured symbolic representations with learned neural ones—a non-trivial challenge the model-based RL community has begun to address in physical state spaces~\citep{haRecurrentWorldModels2018, hafnerMasteringDiverseControl2025}.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We establish that the gap towards autonomous scientific discovery has fundamental challenges that will not be closed by scale and scaffolding alone. The McNamara fallacy narrows problem selection, publication bias omits tacit and failure knowledge, preference optimisation compresses diversity as validated by the hypothesis hivemind experiment, and benchmarks assess single-turn prediction while ignoring the multi-step reasoning and physical feedback loops of scientific investigation. We ground these challenges in the SSE problem: target choice relies on human judgement, hypotheses are unlikely to diverge from the LLZO and NASICON families because literature and annotator priors concentrate there, there is no mechanism for adapting the research process in response to anomalous findings, and translating computational candidates to real battery devices remains an uphill challenge. We suggest simulators as training verifiers, persistent world models that carry epistemic state across an investigation, and preregistration repositories as some of the potential ways forward.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\newpage
+\appendix
+\section{Experiment: hypothesis hivemind}
+\label{sec:hivemind}
+
+Since scientific hypothesis generation is highly open-ended, we were inspired by \citet{jiangArtificialHivemindOpenEnded2025} to evaluate the diversity of LLM outputs on scientific tasks by different providers. We chose 3 models each by Anthropic and OpenAI as they are two of the most popular AI model providers:
+\begin{enumerate}
+ \item Claude Haiku 4.5
+ \item Claude Sonnet 4.5
+ \item Claude Sonnet 4.6
+ \item GPT-5 Nano
+ \item GPT-5 Mini
+ \item GPT-5
+\end{enumerate}
+
+We considered a dataset of 50 publications from the 2025 NeurIPS AI4Mat track (full list in ~\ref{app:dataset}) of shared interest to the AI and materials science communities. We define 2 tasks:
+\begin{enumerate}
+ \item Recovering the underlying hypothesis given a summary of the experiments in a publication.
+ \item Proposing novel hypotheses to extend the core findings given the full text of a publication.
+\end{enumerate}
+In the first task, models received a summary of experiments for each paper and were asked to recover the underlying hypothesis, an interpretive task with a determinate answer serving as a convergence baseline. In the second, models received the full paper text and were asked to generate new hypotheses to extend the work. We expected the open-ended nature of the second task to produce significantly more diverse outputs than the first. For each task we drew 10 independent samples per model and embedded all outputs using text-embedding-3-small similar to \citep{jiangArtificialHivemindOpenEnded2025}. We computed cosine similarity between intra-family and inter-family embedding groups which showed that the models responses converged semantically for both tasks even though we only expected it for the first. Inter-model similarities are shown in Figure~\ref{fig:comparison}, while intra-model similarities are shown in Figure~\ref{fig:intramodel_similarity}.
+
+To verify that the embedding model was not showing degenerate behaviour by embedding all the outputs close to each other (since they were all from the scientific domain), we looked at the cosine similarities for embeddings of outputs generated with the same or different papers as input. Figure~\ref{fig:distribution} clearly shows that the embedding model is capable of distinguishing semantic differences, and what we have discovered is true lack of semantic diversity. The prompts used to generate model outputs can be found in Box~\ref{fig:prompts}.
+
+\begin{figure}[h]
+ \centering
+ \begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{plots/intra_model_repetition_underlying_hypotheses.pdf}
+  \caption{Recover underlying hypothesis}
+ \end{subfigure}
+ \hfill
+ \begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{plots/intra_model_repetition_new_hypotheses.pdf}
+  \caption{Generate novel hypothesis}
+ \end{subfigure}
+ \caption{Intra-model similarities for task 1 and task 2 as defined in the hypothesis hivemind experiment. Together with Figure~\ref{fig:comparison}, we see that inter-model output similarities are not significantly lower than intra-model output similarities, which challenges the diversity in outputs produced by multiple LLMs collectively.}
+ \label{fig:intramodel_similarity}
+\end{figure}
+
+\begin{figure}[t]
+ \centering
+ \begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{plots/intra_inter_kde_pooled_A.pdf}
+  \caption{Recover underlying hypothesis}
+ \end{subfigure}
+ \hfill
+ \begin{subfigure}[t]{0.49\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{plots/intra_inter_kde_pooled_B.pdf}
+  \caption{Generate novel hypothesis}
+ \end{subfigure}
+ \caption{Cosine similarity distribution of embeddings of outputs by any model when generated in response to the same or different papers. The different distributions clearly illustrate that the similarity observed across different model-outputs is true lack of epistemic diversity, not degenerate behavior of the embedding model.}
+ \label{fig:distribution}
+\end{figure}
+
+\begin{tcolorbox}[
+ title=Prompts used in experiments,
+ colback=gray!5,
+ colframe=black,
+ %breakable
+]
+\label{fig:prompts}
+\textbf{Task 1: Generating experiment summaries}
+\begin{lstlisting}
+SYSTEM_PROMPT = (
+ "You are a helpful assistant for summarizing key details of experiments and methodologies from scientific papers."
+)
+USER_INSTRUCTION = (
+ "Summarize the following research paper, focusing ONLY on this question:
+ Carefully analyze ONLY the experiments performed or methods used.
+ Do NOT include results, abstract, introduction, or discussion.
+ Output MUST be valid JSON of the form:
+ `{'
+ ` "title": "<paper title>",'
+ ` "experiments_summary": "<concise summary>"'
+ `}'
+ Do NOT wrap the JSON in markdown code fences.
+ Paper text:
+)
+\end{lstlisting}
+
+\textbf{Task 1: Generating underlying hypothesis}
+\begin{lstlisting}
+SYSTEM_PROMPT = (
+ "You are a scientific reasoning assistant. Given a description of the experiments and methods from a research paper, infer the underlying hypothesis being tested - the core scientific claim the experiments were designed to validate. A hypothesis is a specific, testable, and falsifiable prediction about the relationship between variables. Output ONLY the hypothesis as a single declarative sentence. Do not include preamble, explanation, or any other text."
+)
+USER_INSTRUCTION = (
+ "Generate a single testable hypothesis based on the experiment description above. Express it as one declarative sentence (e.g. `If X, then Y because Z')."
+)
+\end{lstlisting}
+
+\textbf{Task 2: Generating novel hypothesis}
+\begin{lstlisting}
+SYSTEM_PROMPT = (
+ "You are an expert research scientist. Given the context of a research paper, your task is to generate a single novel hypothesis that logically extends beyond the paper's existing findings - not a restatement of them. The hypothesis must be: (1) grounded in a gap or open question identified in the paper, (2) specific and testable, (3) falsifiable. Output ONLY the hypothesis as a single declarative sentence with no preamble or explanation."
+)
+USER_INSTRUCTION = (
+ "Based on the research context above, generate one novel hypothesis that extends beyond what this paper has already established."
+)
+\end{lstlisting}
+\end{tcolorbox}
+
+\subsection{Dataset}
+\label{app:dataset}
+Following are the list of papers considered for the hypothesis hivemind experiment. They are selected from the list of accepted papers from the AI4Mat workshop at NeurIPS 2025.
+
+\begin{enumerate}
+ \item Data-driven prediction of polymer surface adhesion using high-throughput MD and hybrid network models \\ \url{https://openreview.net/pdf?id=0SPoKR8Xrk}
+ \item STR-Bamba: Multimodal Molecular Textual Representation Encoder-Decoder Foundation Model \\ \url{https://openreview.net/pdf?id=0uWNuJ1xtz}
+ \item Universally Converging Representations of Matter Across Scientific Foundation Models \\ \url{https://openreview.net/pdf?id=12ZCZVKm7r}
+ \item Preference Learning from Physics-Based Feedback: Tuning Language Models to Design BCC/B2 Superalloys \\ \url{https://openreview.net/pdf?id=24lzMGlvnq}
+ \item Pharmacophore-Guided Generative Design of Novel Drug-Like Molecules \\ \url{https://openreview.net/pdf?id=35aDuh7ndX}
+ \item Cross Modal Predictive Architecture for Material Property Prediction \\ \url{https://openreview.net/pdf?id=3WZkuWlzmN}
+ \item Language Model Enabled Structure Prediction from Infrared Spectra of Mixtures \\ \url{https://openreview.net/pdf?id=3pAVbjWMXW}
+ \item ML-Driven Discovery of Metastable States \\ \url{https://openreview.net/pdf?id=4U2k4uw43B}
+ \item Universal Machine Learning Interatomic Potentials Enable Accurate Metal-Organic Framework Molecular Modeling \\ \url{https://openreview.net/pdf?id=4Xh9oL5rH0}
+ \item GEOM-Drugs Revisited: Toward More Chemically Accurate Benchmarks for 3D Molecule Generation \\ \url{https://openreview.net/pdf?id=57YLCp7n2V}
+ \item Generalizable Prediction of Mixture Etching Rates Using Graph Neural Networks \\ \url{https://openreview.net/pdf?id=5OsnDm1CdX}
+ \item Foundation Models Enabling Multi-Scale Battery Materials Discovery: From Molecules to Devices \\ \url{https://openreview.net/pdf?id=6pjxodugzO}
+ \item GAP: Guided Diffusion for A Priori Transition State Sampling \\ \url{https://openreview.net/pdf?id=7brF4sMQq3}
+ \item Task Alignment Outweighs Framework Choice in Scientific LLM Agents \\ \url{https://openreview.net/pdf?id=7cbwuA5k0T}
+ \item A Computational Workflow for Cost-Effective Synthesis of Inorganic Materials: Integrating Thermodynamics, Cellular Automata, Machine Learning, and Commercial Databases \\ \url{https://openreview.net/pdf?id=7l75CbxtmC}
+ \item MatPROV: A Provenance Graph Dataset of Material Synthesis Extracted from Scientific Literature \\ \url{https://openreview.net/pdf?id=8JFITrNy3K}
+ \item Accelerated Inorganic Materials Design with Generative AI Agents \\ \url{https://openreview.net/pdf?id=9JSO4qf1RQ}
+ \item The Loss Landscape of XRD-Based Structure Optimization Is Too Rough for Gradient Descent \\ \url{https://openreview.net/pdf?id=A21WF9M1Um}
+ \item AI-Guided Design and Discovery of Silicon-Based Anode Materials for Lithium-Ion Batteries \\ \url{https://openreview.net/pdf?id=AQkGpEMGWA}
+ \item LLM Agents for Knowledge Discovery in Atomic Layer Processing \\ \url{https://openreview.net/pdf?id=Bg4Hn9Qq3w}
+ \item Towards Dynamic Benchmarks for Autonomous Materials Discovery \\ \url{https://openreview.net/pdf?id=Cfj7uBu5dy}
+ \item Surrogate Modeling for the Design of Optimal Lattice Structures using Tensor Completion \\ \url{https://openreview.net/pdf?id=Ciw6DbDa4U}
+ \item Scalable Low-Energy Molecular Conformer Generation with Quantum Mechanical Accuracy \\ \url{https://openreview.net/pdf?id=Ei3eF8B8XH}
+ \item Towards End-to-End Learning of Protein Structure Prediction and Structure-based Sequence Design \\ \url{https://openreview.net/pdf?id=EuACaJblk4}
+ \item Training Speedups via Batching for Geometric Learning: An Analysis of Static and Dynamic Algorithms \\ \url{https://openreview.net/pdf?id=Gzf8k2wPdF}
+ \item Closed-loop, Machine Learning-Driven Optimization of Reactor Yields in Reactive Carbon Electrolyzers \\ \url{https://openreview.net/pdf?id=InZczCC8X1}
+ \item Benchmarking Agentic Systems in Automated Scientific Information Extraction with ChemX \\ \url{https://openreview.net/pdf?id=YKxwBMK8Nl}
+ \item Accurate Band Gap Prediction in Porous Materials using $\Delta$-Learning \\ \url{https://openreview.net/pdf?id=a3LKICpDO2}
+ \item Accelerated Discovery of High-Performance Polyamines for Solid-State Direct CO$_2$ Capture via Efficient Simulations and Bayesian Optimization \\ \url{https://openreview.net/pdf?id=aECXy5Jgm4}
+ \item Efficient Nudged Elastic Band Method using Neural Network Bayesian Algorithm Execution \\ \url{https://openreview.net/pdf?id=acfR6umMJt}
+ \item A Chemically Grounded Evaluation Framework for Generative Models in Materials Discovery \\ \url{https://openreview.net/pdf?id=amn6lBDjXm}
+ \item NaviDiv: A Comprehensive Tool for Monitoring Chemical Diversity in Generative Molecular Design \\ \url{https://openreview.net/pdf?id=auRe7zr32I}
+ \item When Forces Disagree: A Data-Free Fast Uncertainty Estimate for Direct-Force Pre-trained Neural Network Potentials \\ \url{https://openreview.net/pdf?id=bmgU7yWBeC}
+ \item AMDEN: Amorphous Materials DEnoising Network \\ \url{https://openreview.net/pdf?id=cEgjPFdLvl}
+ \item CHROMA: Conversational Human-Readable Optical Multilayer Assembly for Natural Language-Driven Inverse Design of Structural Coloration \\ \url{https://openreview.net/pdf?id=cFTvHHXvt6}
+ \item Coupling Language Models with Physics-based Simulation for Synthesis of Inorganic Materials \\ \url{https://openreview.net/pdf?id=ctyy8EJYQj}
+ \item An Effective Machine Learning Frame for Materials Discovery Structured by a Chemical Concept \\ \url{https://openreview.net/pdf?id=dEtRvi7G5i}
+ \item Accelerating Material Discovery for Metal Organic Frameworks using Large Language Models \\ \url{https://openreview.net/pdf?id=dmeAH1hVR8}
+ \item Concept-based Steering of Large Language Models for Conditional Molecular Generation \\ \url{https://openreview.net/pdf?id=e8bcQehZ15}
+ \item An Exploration of Dataset Bias in Single-Step Retrosynthesis Prediction \\ \url{https://openreview.net/pdf?id=eUiZg9uUt4}
+ \item Benchmarking Knowledge Transfer Methods in De Novo Materials Discovery \\ \url{https://openreview.net/pdf?id=egi8g2U0ZX}
+ \item Towards Fully Automated Molecular Simulations: Multi-Agent Framework for Simulation Setup and Force Field Extraction \\ \url{https://openreview.net/pdf?id=enQdbinvNd}
+ \item SAM-EM: Real-Time Segmentation for Automated Liquid Phase Transmission Electron Microscopy \\ \url{https://openreview.net/pdf?id=farKrjdsIH}
+ \item CompGen: A Conditional Generation Framework for Inverse Composition Design of Catalytic Surfaces \\ \url{https://openreview.net/pdf?id=g6Sj1OFjAu}
+ \item Physics-Constrained Diffusion for Lightweight Composite Material Design \\ \url{https://openreview.net/pdf?id=gifMFKvAl5}
+ \item XDIP: A Curated X-ray Absorption Spectrum Dataset for Iron-Containing Proteins \\ \url{https://openreview.net/pdf?id=hFzjgQzoVU}
+ \item Machine Learning Interatomic Potentials: Library for Efficient Training, Model Development and Simulation of Molecular Systems \\ \url{https://openreview.net/pdf?id=hQCdhenqre}
+ \item Semi-Supervised Learning for Molecular Graphs via Ensemble Consensus \\ \url{https://openreview.net/pdf?id=hk6iX4mg3B}
+ \item Emergent Pose-Invariance in 3D Molecular Representations via Multimodal Learning \\ \url{https://openreview.net/pdf?id=iFHaZzs6Kz}
+ \item Bridging Data-Rich and Data-Poor Domains on Lithium-Ion Battery via Scanning Electron Microscopic Data Through Convolutional Neural Network Transfer Learning \\ \url{https://openreview.net/pdf?id=j3aOU8Ahue}
+\end{enumerate}
+
+\end{document}
