@@ -1,0 +1,904 @@
+When Forces Disagree: A Data-Free Fast Uncertainty
+Estimate for Direct-Force Pre-trained Neural Network
+Potentials
+Anonymous Author(s)
+Affiliation
+Address
+email
+Abstract
+Neural Network Interatomic Potentials (NNIPs) are a cornerstone of modern atom-
+1
+istic simulations, but their reliability is limited by the difficulty in quantifying
+2
+prediction uncertainty. Current uncertainty quantification (UQ) methods present
+3
+a trade-off: model ensembles offer a robust, data-free metric based on model
+4
+disagreement but are computationally expensive, while faster single-model meth-
+5
+ods typically require access to the original training data which can be practically
+6
+inconvenient and chemically sparse. This paper introduces a novel differentiable
+7
+UQ metric for direct-force pre-trained models that combines the strengths of both
+8
+paradigms, offering the data-free reliability of ensembles with the computational
+9
+speed of a single model. Our metric is derived from the internal disagreement
+10
+between two force predictions from a single NNIP—the directly predicted (non-
+11
+conservative) force and the energy-gradient-derived (conservative) force. We show
+12
+a strong monotonic correlation between this force disagreement and the true force
+13
+error against Density Functional Theory calculations. This relationship is robust
+14
+across a diverse set of materials and holds even for out-of-distribution structures
+15
+generated via adversarial attacks. Because the method is computationally cheap
+16
+and requires no training data, it offers a powerful, out-of-the-box tool for on-the-
+17
+fly assessment of model confidence with wide-ranging applications for reliable
+18
+atomistic modeling.
+19
+1
+Introduction
+20
+Machine-learned interatomic potentials (MLIPs), particularly those based on neural networks (NNIPs),
+21
+have become essential tools in computational materials science, bridging the accuracy of quantum
+22
+mechanics with the efficiency of classical force fields [1–4]. Despite their success, NNIPs can fail
+23
+catastrophically on out-of-distribution (OOD) structures, leading to unstable simulations and incorrect
+24
+scientific conclusions [5–7]. Robust uncertainty quantification (UQ) is therefore critical for their
+25
+trustworthy application [8–11].
+26
+The dominant UQ methods for MLIPs fall into two main families. The first, deep ensembles, trains
+27
+multiple models and uses their prediction variance as a robust, data-free uncertainty estimate, but at a
+28
+high computational cost [5, 12, 13]. The second family comprises single-model methods. Many of
+29
+these, such as Bayesian Neural Networks (BNNs), require specialized and often complex training
+30
+procedures to learn an approximate posterior distribution over model weights [14, 15]. Other single-
+31
+model approaches, including those based on distance metrics or density estimators like Gaussian
+32
+Mixture Models (GMMs), but these are data-dependent, requiring access to the original training set to
+33
+assess novelty [2, 16–18]. This is a major bottleneck for the growing ecosystem of large, pre-trained
+34
+Submitted to 39th Conference on Neural Information Processing Systems (NeurIPS 2025). Do not distribute.
+“foundation models” as access to the massive training datasets can be time-consuming and the datasets
+35
+themselves can have low utility for a specific system of interest [19–22].
+36
+Modern NNIPs can predict forces in two ways: (1) conservative forces (ˆFc), calculated as the
+37
+negative gradient of the predicted energy (ˆFc = −∇ˆE), which is physically rigorous but slower
+38
+[23, 24]; and (2) non-conservative forces (ˆFnc), predicted directly as a vector output, which is
+39
+faster but violates energy conservation [25–27]. We propose that the disagreement between these two
+40
+predictions, a quantity we term the “Force Delta,” can be used as a powerful, data-free UQ metric.
+41
+Our method captures the data-free benefit of ensembles, which rely on internal model disagreement,
+42
+while retaining the computational efficiency of single-model UQ, offering an out-of-the-box tool with
+43
+efficient implementation for on-the-fly model evaluation (see Appendix for Computational Cost).
+44
+2
+Methods
+45
+2.1
+The Force Delta Uncertainty Metric
+46
+A fundamental property of a physical force field is that it must be conservative, meaning the forces
+47
+are the negative gradient of a potential energy, F = −∇RE. A direct mathematical consequence is
+48
+that the curl of a conservative force field is zero (∇× F = 0). Any violation of this condition signals
+49
+a failure to represent the true underlying physics.
+50
+An NNIP is a function FNN that maps an atomic configuration R = {ri, Zi} to a predicted
+51
+potential energy ˆENN(R) and a set of atomic forces.
+The conservative force on atom i is
+52
+ˆFc,i(R) = −∇ri ˆENN(R), computed via automatic differentiation. The non-conservative force,
+53
+ˆFnc,i, is predicted directly by a separate output head for direct-force NNIPs.
+54
+In a perfectly learned model, these two forces would be identical. Therefore, any disagreement
+55
+between them is a direct measure of the model’s physical inconsistency and a local violation of
+56
+energy conservation. A non-zero difference implies that the directly predicted force field has a
+57
+non-zero curl, a clear indicator of the model’s failure to capture the true potential energy surface.
+58
+This interpretability is a significant advantage over more abstract metrics like ensemble variance.
+59
+We quantify this physical violation by defining our uncertainty metric, the Force Delta (U∆), as the
+60
+root-mean-square (RMS) of the vector difference between these two force predictions, averaged over
+61
+all 3N force components:
+62
+U∆(R) =
+v
+u
+u
+t 1
+3N
+N
+X
+i=1
+∥ˆFnc,i(R) −ˆFc,i(R)∥2
+(1)
+This metric is applicable to any model architecture that provides both an invariant scalar energy output
+63
+(for ˆFc) and a separate equivariant vector output (for ˆFnc). To validate this metric, we compare it
+64
+against the true error, εdirect, which is the RMS difference between the model’s non-conservative
+65
+force and the ground-truth DFT force, FDFT,i:
+66
+εdirect(R) =
+v
+u
+u
+t 1
+3N
+N
+X
+i=1
+∥ˆFnc,i(R) −FDFT,i(R)∥2
+(2)
+We validate against εdirect because ˆFnc is often preferred in production simulations for speed, making
+67
+its error the most relevant quantity to estimate. Our central claim is that a strong, predictive monotonic
+68
+relationship exists between U∆and εdirect.
+69
+2.2
+Adversarial Generation of OOD Structures
+70
+To rigorously test our metric on challenging OOD configurations, we employ an adversarial attack
+71
+strategy [28–31]. Starting from equilibrium structures, we iteratively perturb the atomic positions r to
+72
+find configurations that are both physically plausible (low energy) and maximally uncertain. This is
+73
+achieved by updating the atomic positions along a composite gradient that simultaneously maximizes
+74
+our uncertainty metric U∆while minimizing the predicted potential energy ˆENN [32]:
+75
+rnew = rold + α∇rU∆−β∇r ˆENN
+(3)
+2
+where α and β is the learning rates for the attack and energy minimization (to ensure the generated
+76
+OOD configurations still conforms to the Boltzmann distribution), respectively. This differentiable
+77
+process efficiently drives the system towards high-uncertainty, but low-energy scenarios where the
+78
+model’s internal predictions disagree most strongly [6, 33].
+79
+3
+Results and Discussion
+80
+3.1
+Validation on Equilibrium Structures
+81
+We first evaluated the Force Delta on stable, in-distribution structures to establish a baseline. For each
+82
+of the 10 material systems (see Appendix), we used an equilibrium configuration and calculated the
+83
+average Force Delta (U∆) and average true error (εdirect) across all 15 of the pre-trained models (see
+84
+Appendix). Figure 1a shows a remarkably strong monotonic association, confirmed by a Spearman’s
+85
+rank correlation coefficient of rs = 0.98. This indicates that for well-behaved structures, the Force
+86
+Delta is an initial powerful indicator of the underlying model error.
+87
+3.2
+Comparison with an Ad-Hoc Ensemble Baseline
+88
+To benchmark the Force Delta against a standard ensemble-based approach, we performed a head-to-
+89
+head comparison within each model family since Orb and EquiformerV2 were trained using different
+90
+ground-truth DFT methods (w/ vs. w/o D3). We compared how well our single-model Force Delta
+91
+predicts the error of its individual model against how well the ad-hoc ensemble variance predicts the
+92
+error of the ensemble’s average prediction.
+93
+It is crucial to note that these ad-hoc collection of models are not “deep ensembles” in the strictest
+94
+sense, as they were not co-trained with varied initializations on an identical dataset. However, they
+95
+represent the most direct ensemble-based UQ approach available to a user working with publicly
+96
+available pre-trained models.
+97
+The results, summarized in Table 1, reveal the remarkable effectiveness of the Force Delta. For the
+98
+EquiformerV2 family, the single-model Force Delta significantly outperforms the 10-model ensemble
+99
+variance, achieving a much higher average Spearman correlation. This demonstrates that for this
+100
+diverse set of models, probing the internal physical consistency is a fundamentally more reliable UQ
+101
+strategy than measuring external disagreement.
+102
+For the Orb family, the ensemble variance shows a slightly stronger correlation on average, suggesting
+103
+that the optimal UQ strategy can be model-dependent. Nonetheless, the Force Delta still provides
+104
+a robust and reliable uncertainty estimate. This confirms that our method provides UQ of a quality
+105
+comparable to an expensive ensemble, while retaining the out-of-the-box efficiency of a single-model
+106
+approach in any practical application.
+107
+Table 1: Comparison of UQ strategies on equilibrium structures. The single-model Force Delta (U∆)
+is benchmarked against the ad-hoc ensemble force variance (Uvar). The Force Delta demonstrates
+significantly superior performance for the EquiformerV2 family and competitive performance for the
+Orb family, while being far more computationally efficient in practice.
+Model Family
+Avg. rs (Force Delta, U∆)
+rs (Ensemble Variance, Uvar)
+Orb (5 models)
+0.70 ± 0.04
+0.73
+EquiformerV2 (10 models)
+0.91 ± 0.02
+0.78
+3.3
+Robustness under Adversarial Attack
+108
+The strong monotonic correlation generally holds even for OOD structures generated via adversarial
+109
+attacks. Figure 1b shows a parity plot for individual structures (both standard and adversarial) for
+110
+the Orb potential across all 10 systems. The data points cluster tightly along a monotonic curve,
+111
+demonstrating a direct correspondence between the internal force disagreement and the actual error.
+112
+Because the relationship is not strictly linear, we use Spearman’s rank correlation, which is a more
+113
+robust measure of association.
+114
+3
+(a) Equilibrium structures
+(b) Adversarial (Orb)
+(c) Adversarial (eqV2)
+Figure 1: Correlation between Force Delta (U∆) and true error (εdirect). (a) Model-averaged values
+for equilibrium structures (rs = 0.98). Adversarial structures for (b) Orb and (c) EquiformerV2,
+demonstrating generality across different model architectures and material systems
+The correlation for Orb is very strong (rs > 0.9) for most systems (see Appendix). For a few systems
+115
+(e.g., MoF5, aspirin), the correlation is weaker or even negative. This is because the true error of the
+116
+initial equilibrium structure was already substantial (see Appendix). Consequently, the adversarial
+117
+attack, while still finding high-uncertainty configurations, did not produce as dramatic an increase in
+118
+error, which can weaken the calculated correlation coefficient. Crucially, the Force Delta for these
+119
+points is consistently high, correctly flagging them as unreliable. This shows the metric functions
+120
+as an effective “failure detector” for applications like active learning or molecular dynamics (MD)
+121
+monitoring, where identifying failure is often more important than perfect error prediction.
+122
+To test generality, we performed the same analysis on EquiformerV2 for six systems. While the
+123
+Spearman correlation is more modest (see Appendix), a clear positive monotonic trend remains
+124
+for most systems, as shown in Figure 1c. This demonstrates that the underlying principle—that
+125
+internal force disagreement tracks with true error—is not unique to one model architecture. The
+126
+weaker correlation suggests that the quality of the UQ metric may be model-dependent (different
+127
+architectures or training strategies), but the metric itself is still present and useful.
+128
+Our results confirm the Force Delta is an excellent metric for ranking uncertainty, making it ideal
+129
+for applications like active learning. However, the metric is not calibrated: its magnitude does not
+130
+directly predict the magnitude of the true error, as shown in Figure 1. Therefore, its primary role is as
+131
+a robust and efficient criterion for identifying unreliable predictions, not as a precise error estimator.
+132
+4
+3.4
+The Data-Free Advantage at a Single-Model Efficiency
+133
+Our method combines the strengths of the two dominant UQ families, extending the ensemble
+134
+principle to a single model, where disagreement among diverse models is a robust, data-free estimate
+135
+for epistemic uncertainty [5, 12]. It measures the disagreement between two physically-motivated
+136
+predictive pathways within a single model, providing a similar estimate of internal inconsistency
+137
+but at the computational cost of a single model (see Appendix), avoiding the substantial expense of
+138
+training and running multiple large models [13, 11].
+139
+This data-free nature is not merely a convenience but a critical advantage, essentially eliminating
+140
+setup costs associated with often proprietary or intractable training data of large-scale foundation
+141
+models. Moreover, the implementation is computationally efficient, requiring only a single additional
+142
+backpropagation pass per structure, in contrast to the substantial cost of training an entirely separate
+143
+statistical model on a large training set. Data-dependent UQ also suffers from a more fundamental
+144
+data utility problem—a universal potential’s training set may be vast but sparse for a specific system
+145
+[1, 34]. Furthermore, on heterogeneous data, these methods are known to underestimate errors and
+146
+can fail counterintuitively in OOD settings, where uncertainty may decrease as error grows [6, 35–37].
+147
+Our method avoids these pitfalls by directly probing the model’s physical inconsistency—the inability
+148
+of the model to perfectly represent the true physics—which is the dominant source of error in MLIPs
+149
+and is often ignored by standard Bayesian UQ frameworks [38–40].
+150
+3.5
+Applications in Atomistic Modeling
+151
+This work provides an essential out-of-the-box estimate of model reliability with wide-ranging
+152
+applications for reliable atomistic modeling. In high-throughput screening, it can act as a filter to
+153
+flag unreliable predictions for more expensive validation, focusing resources where they are most
+154
+needed [41, 42]. For molecular dynamics, it provides an on-the-fly safeguard to detect when a
+155
+simulation could enter an OOD region, preventing numerical instabilities and enabling more stable
+156
+long-timescale simulations [43, 44]. In active learning, it provides a highly efficient differentiable
+157
+sampling strategy to guide the selection of new training data, improving the data-efficiency of model
+158
+training and accelerating the development of a robust potential [45, 46]. Finally, the method enables
+159
+new paradigms for benchmarking and model development. It allows for the data-free selection of
+160
+the best pre-trained model for a specific task and can be used as a physics-informed regularization
+161
+term during training to improve generalization. For the growing number of foundation models, this
+162
+gives users an essential tool to evaluate model reliability on their own systems.
+163
+4
+Conclusion
+164
+We have introduced the Force Delta, a fast, accurate, and data-free uncertainty metric for NNIPs
+165
+based on internal model disagreement. We demonstrated a strong monotonic correlation between
+166
+this metric and the true DFT error across diverse materials, models, and for both equilibrium and
+167
+adversarially generated OOD structures. The method’s key advantage is its data-free and single-model
+168
+nature with efficient implementation, overcoming the severe practical and theoretical limitations of
+169
+data-dependent UQ and enables reliable uncertainty estimation for any direct-force pre-trained model.
+170
+By providing a new paradigm for high-throughput screening, molecular dynamics simulations, active
+171
+learning, model benchmarking, and physics-informed training, this work provides a computationally
+172
+lightweight and out-of-the-box framework for assessing the predictive reliability of the next generation
+173
+of direct-force foundation models for materials discovery.
+174
+References
+175
+[1] J¨org Behler and Michele Parrinello.
+Generalized neural-network representation of high-
+176
+dimensional potential-energy surfaces. Physical Review Letters, 98(14):146401, 2007.
+177
+[2] Albert P Bart´ok, Mike C Payne, Risi Kondor, and G´abor Cs´anyi. Gaussian approximation
+178
+potentials: The accuracy of quantum mechanics, without the electrons. Physical Review Letters,
+179
+104(13):136403, 2010.
+180
+[3] Emir Kocer, Tsz Wai Ko, and J¨org Behler. Neural network potentials: A concise overview of
+181
+methods. Annual Review of Physical Chemistry, 73:163–186, 2022.
+182
+5
+[4] Oliver Unke, Stefan Chmiela, Michael Gastegger, Kristof T Sch¨utt, H E Sauceda, and Klaus-
+183
+Robert M¨uller. Machine learning force fields. Chemical Reviews, 121(17):10142–10186,
+184
+2021.
+185
+[5] Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable
+186
+predictive uncertainty estimation using deep ensembles. In Advances in Neural Information
+187
+Processing Systems, pages 6402–6413, 2017.
+188
+[6] Aik Rui Tan, Shingo Urata, Samuel Goldman, Johannes CB Dietschreit, and Rafael G´omez-
+189
+Bombarelli. Single-model uncertainty quantification in neural network potentials does not
+190
+consistently outperform model ensembles. arXiv preprint arXiv:2305.01754, 2023.
+191
+[7] Linfeng Zhang, Jiequn Han, Han Wang, Roberto Car, and Weinan E. Deep potential molecular
+192
+dynamics: a scalable model with the accuracy of quantum mechanics. Physical review letters,
+193
+120(14):143001, 2018.
+194
+[8] Moloud Abdar, Farhad Pourpanah, Sadiq Hussain, Dana Rezazadegan, Ling Liu, Moham-
+195
+mad Ghasemian, et al. A review of uncertainty quantification in deep learning: Techniques,
+196
+applications and challenges. Information Fusion, 76:243–297, 2021.
+197
+[9] Khachik Sargsyan, Logan Williams, and Habib N. Najm. Uncertainty quantification of ma-
+198
+chine learning interatomic potential models. USACM Thematic Conference on Uncertainty
+199
+Quantification for Machine Learning Integrated Physics Modeling (UQ-MLIP), 2022.
+200
+[10] Shuo Chen, Suk-Wah Lee, Chi Chen, Weile Ji, Liping Zhang, Mohan Chen, et al. Uncertainty
+201
+quantification for atomic-scale machine learning. npj Computational Materials, 5(1):118, 2019.
+202
+[11] Brooke E Husic, Nicholas E Charron, D Lemm, Jiang Wang, Adri`a P´erez, Maciej Majewski,
+203
+et al. Coarse-graining, machine learning, and the curse of dimensionality. The Journal of
+204
+chemical physics, 153(19), 2020.
+205
+[12] Stanislav Fort, Huiyi Hu, and Balaji Lakshminarayanan. Deep ensembles: A loss landscape
+206
+perspective. arXiv preprint arXiv:1912.02757, 2019.
+207
+[13] Fredrik K Gustafsson, Martin Danelljan, and Thomas B Schon. Evaluating scalable bayesian
+208
+deep learning methods for robust computer vision. pages 320–321, 2020.
+209
+[14] Radford M Neal. Bayesian Learning for Neural Networks, volume 118. Springer Science &
+210
+Business Media, 1996.
+211
+[15] Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian approximation: Representing
+212
+model uncertainty in deep learning. In International Conference on Machine Learning, pages
+213
+1050–1059. PMLR, 2016.
+214
+[16] Christopher M Bishop. Pattern Recognition and Machine Learning. Springer, 2006.
+215
+[17] Douglas A Reynolds and Richard C Rose. Robust text-independent speaker identification
+216
+using gaussian mixture speaker models. IEEE Transactions on speech and audio processing,
+217
+3(1):72–83, 1995.
+218
+[18] Cas van der Hirschfeld, Giulio Imbalzano, and Michele Ceriotti. Uncertainty quantification in
+219
+atomistic machine learning. The Journal of Chemical Physics, 153(10), 2020.
+220
+[19] Kevin Maik Jablonka, Greeshma M Jothiappan, Shen Wang, Berend Smit, and Berend Yoo. Bias
+221
+free multiobjective active learning for materials design and discovery. Nature Communications,
+222
+12(1):2312, 2021.
+223
+[20] Amil Merchant, Simon Batzner, Samuel S Schoenholz, Muratahan Aykol, Gowoon Cheon, and
+224
+Ekin D Cubuk. Scaling deep learning for materials discovery. Nature, 624(7990):80–85, 2023.
+225
+[21] Chengcheng Lu, Peigang Huang, Weike Liu, Bang Liu, et al. A survey of ai for materials
+226
+science: Foundation models, llm agents, datasets, and tools. arXiv preprint arXiv:2506.20743,
+227
+2024.
+228
+6
+[22] Nhat-Duc Tran, Chi Chen, S Joshua Swamidass, and Shyue Ping Ong. Towards a universal
+229
+neural network potential for material discovery. Chemistry of Materials, 34(19):8569–8580,
+230
+2022.
+231
+[23] Mark E Tuckerman. Statistical Mechanics: Theory and Molecular Simulation. Oxford Univer-
+232
+sity Press, 2023.
+233
+[24] Atilim Gunes Baydin, Barak A Pearlmutter, Alexey Andreyevich Radul, and Jeffrey Mark
+234
+Siskind. Automatic differentiation in machine learning: a survey. Journal of Machine Learning
+235
+Research, 18(153):1–43, 2018.
+236
+[25] Daniele Bigi, Marco F Langer, and Michele Ceriotti. The dark side of the forces: assessing non-
+237
+conservative force models for atomistic machine learning. arXiv preprint arXiv:2401.06208,
+238
+2024.
+239
+[26] Yuchao Fu, Tian Lan, et al. Learning smooth and expressive interatomic potentials for physical
+240
+property prediction. arXiv preprint arXiv:2502.12147, 2024.
+241
+[27] Andrea Grisafi and Michele Ceriotti. Incorporating long-range physics in atomic-scale machine
+242
+learning. The Journal of chemical physics, 151(20), 2019.
+243
+[28] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversar-
+244
+ial examples. arXiv preprint arXiv:1412.6572, 2014.
+245
+[29] Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfel-
+246
+low, and Rob Fergus. Intriguing properties of neural networks. arXiv preprint arXiv:1312.6199,
+247
+2013.
+248
+[30] Justin Gilmer, Andrew Ilyas, Logan Engstrom, and Aleksander Madry. Adversarial examples
+249
+are a natural consequence of test error in noise. arXiv preprint arXiv:1901.10513, 2019.
+250
+[31] Alexey Kurakin, Ian Goodfellow, and Samy Bengio. Adversarial examples in the physical
+251
+world. arXiv preprint arXiv:1607.02533, 2016.
+252
+[32] Daniel Schwalbe-Koda, Aik Rui Tan, and Rafael G´omez-Bombarelli. Differentiable sampling
+253
+of molecular geometries with uncertainty-based adversarial attacks. Nature Communications,
+254
+12(1):5035, 2021.
+255
+[33] Heiko Stuke, Kristof T Sch¨utt, Michael Gastegger, and Klaus-Robert M¨uller. Chemical explo-
+256
+ration with active learning and adversarial attacks. Machine Learning: Science and Technology,
+257
+2(2):025034, 2021.
+258
+[34] Chi Chen, Kevin Gan, et al. Improved materials 3-body graph network universal potential with
+259
+direct sampling. npj Computational Materials, 10(1):1–10, 2024.
+260
+[35] Fei Shuang, Zixiong Wei, Kai Liu, Wei Gao, and Poulumi Dey. Model accuracy and data
+261
+heterogeneity shape uncertainty quantification in machine learning interatomic potentials. arXiv
+262
+preprint arXiv:2508.03405, 2025.
+263
+[36] Yonatan Kurniawan, Mingjian Wen, Ellad B Tadmor, and Mark K Transtrum. Comparative
+264
+study of ensemble-based uncertainty quantification methods for neural network interatomic
+265
+potentials. arXiv preprint arXiv:2508.06456, 2025.
+266
+[37] Andrej Nistranec, A Gilad Kusne, et al. Uncertainty-aware machine learning for autonomous
+267
+experiments. Current Opinion in Solid State and Materials Science, 28(1):100112, 2024.
+268
+[38] T. D. Swinburne and D. Perez. Uncertainty quantification for misspecified machine learned
+269
+interatomic potentials. arXiv preprint arXiv:2502.07104, 2025.
+270
+[39] Houman Owhadi and Clint Scovel. Kernel-based uncertainty quantification and calibration of
+271
+black-box models. arXiv preprint arXiv:1901.07821, 2019.
+272
+[40] Volker L Deringer, Miguel A Caro, and G´abor Cs´anyi. Gaussian process regression for materials
+273
+and molecules. Advanced Materials, 33(46):2002456, 2021.
+274
+7
+[41] Jeff Greeley, Thomas F Jaramillo, Jacob Bonde, Ib Chorkendorff, and Jens K Nørskov. Compu-
+275
+tational high-throughput screening of electrocatalytic materials for hydrogen evolution. Nature
+276
+Materials, 8(10):809–813, 2009.
+277
+[42] Y Zhang and C Ling. Machine learning: a powerful tool for facilitating materials discovery and
+278
+design. MRS Communications, 10(1):1–14, 2020.
+279
+[43] Shunzhou Wan, Robert C Sinclair, and Peter V Coveney. Uncertainty quantification in classical
+280
+molecular dynamics. Philosophical Transactions of the Royal Society A, 379(2197):20200082,
+281
+2021.
+282
+[44] Xiaowo Li, Julia A Plews, Guang Lin, and Dallas R Trinkle. Uncertainty quantification of
+283
+interatomic potentials. Physical Review B, 104(1):014105, 2021.
+284
+[45] Burr Settles. Active learning literature survey. Technical Report 1648, University of Wisconsin-
+285
+Madison Department of Computer Sciences, 2009.
+286
+[46] Kevin Maik Jablonka, Giriprasad M Jothiappan, Shen Wang, Berend Smit, and Berend Yoo. Bias
+287
+free multiobjective active learning for materials design and discovery. Nature Communications,
+288
+12(1):2312, 2021.
+289
+[47] Mark Neumann, James Gin, Benjamin Rhodes, Steven Bennett, Zhiyi Li, Hitarth Choubisa,
+290
+Arthur Hussey, and Jonathan Godwin. Orb: A fast, scalable neural network potential. arXiv
+291
+preprint arXiv:2410.22570, 2024.
+292
+[48] Yi-Lun Liao, Brandon Liu, H. T. Pao, Yuchao Zhao, Bryan Wood, C. Lawrence Zitnick, and
+293
+Tess Smidt. Equiformerv2: Improved equivariant transformer for scaling to higher-degree
+294
+representations. In The Twelfth International Conference on Learning Representations, 2024.
+295
+[49] Johannes Gasteiger, Florian Becker, and Kristof T Sch¨utt. Gemnet: Universal directional
+296
+graph neural networks for molecules. Advances in Neural Information Processing Systems,
+297
+34:6790–6800, 2021.
+298
+[50] Simon Batzner, Albert Musaelian, Lixin Sun, Mario Geiger, Jonathan P Mailoa, et al. E (3)-
+299
+equivariant graph neural networks for data-efficient and accurate interatomic potentials. Nature
+300
+communications, 13(1):2453, 2022.
+301
+[51] Stefan Chmiela, Valentin Vassilev-Galindo, Oliver T Unke, Adil Kabylda, Huziel E Sauceda,
+302
+Alexandre Tkatchenko, and Klaus-Robert M¨uller. Accurate global machine learning force fields
+303
+for molecules with hundreds of atoms. Science Advances, 9(2):eadf0873, 2023.
+304
+[52] Georg Kresse and J¨urgen Furthm¨uller. Efficient iterative schemes for ab initio total-energy
+305
+calculations using a plane-wave basis set. Physical Review B, 54(16):11169, 1996.
+306
+[53] John P Perdew, Kieron Burke, and Matthias Ernzerhof. Generalized gradient approximation
+307
+made simple. Physical Review Letters, 77(18):3865, 1996.
+308
+[54] Jason M Munro, Katherine Latimer, Matthew K Horton, Shyam Dwaraknath, and Kristin A
+309
+Persson. An improved symmetry-based approach to reciprocal space path selection in band
+310
+structure calculations. npj Computational Materials, 6(1):112, 2020.
+311
+A
+Appendix
+312
+A.1
+Correlation between UQ and True Error on OOD adversarial test set
+313
+A.2
+Analysis of Correlation Strength vs. Initial Model Error
+314
+Figure 2 directly visualizes the argument made in the main text: that systems with a high initial error
+315
+on their equilibrium structure tend to exhibit weaker Spearman correlations during adversarial attacks.
+316
+This supports our conclusion that a weak correlation coefficient does not necessarily indicate a failure
+317
+of the UQ metric, but can be an artifact of the model already being highly uncertain.
+318
+8
+Table 2: Spearman’s rank correlation (rs) between U∆and εdirect on adversarial test sets.
+Orb v3
+EquiformerV2
+System
+Group
+rs
+System
+Group
+rs
+Mg17Al12
+Solid
+1.00
+ice
+Solid
+0.84
+LGPS
+Solid
+1.00
+Mg17Al12
+Solid
+0.42
+ice
+Solid
+0.91
+LGPS
+Solid
+0.18
+MoF5
+Solid
+-0.31
+CaPd-NH2
+Surface
+0.23
+CaPd-NH2
+Surface
+0.58
+aspirin
+Molecule
+0.44
+paracetamol
+Molecule
+0.97
+paracetamol
+Molecule
+0.08
+stachyose
+Molecule
+0.93
+Ac-Ala3-NHMe
+Molecule
+0.95
+DHA
+Molecule
+0.72
+aspirin
+Molecule
+-0.02
+(a) Orb v3
+(b) EquiformerV2
+Figure 2: Analysis of Spearman’s rank correlation (rs) from adversarial attacks versus the initial
+true error (εdirect) of the equilibrium structure for each system. For systems with low initial error,
+the adversarial attack creates a wide range of errors, leading to strong correlations. For systems
+where the model is already highly inaccurate, the dynamic range is smaller, weakening the calculated
+correlation.
+Figure 3: Correlation between Force Delta (U∆) and true error (εdirect). (a) Model-averaged values
+for equilibrium structures
+A.3
+Benchmarking Potential of the Force Delta on Equilibrium Structures
+319
+To demonstrate the potential of the Force Delta as a tool for benchmarking and model selection,
+320
+this section provides a plot (Figure 3) showing the Force Delta versus the true error for each of
+321
+the 15 models in our ensemble, evaluated on the same equilibrium structures. The results show
+322
+a perfect correlation for the Orb models, indicating that the Force Delta can distinguish between
+323
+9
+the performance of different model versions. The EquiformerV2 models, however, show no clear
+324
+correlation in this test, suggesting that this benchmarking capability may also be model-dependent.
+325
+A.4
+Computational Details
+326
+A.4.1
+Model Details
+327
+We performed validations using 15 state-of-the-art NNIPs representing diverse architectural classes:
+328
+five versions of Orb, all of which are attention-augmented Graph Neural Networks, and ten versions
+329
+of EquiformerV2, an E(3)-Equivariant Transformer [47–50]. This diversity allows us to test the
+330
+generality of our findings. The specific model versions are listed below.
+331
+A.4.2
+Orb Models
+332
+The five Orb models used were:
+333
+• orb-d3-xs-v2
+334
+• orb-d3-v2
+335
+• orb-d3-sm-v2
+336
+• orb-v3-direct-inf-mpa
+337
+• orb-v3-direct-20-mpa
+338
+EquiformerV2 Models
+339
+The ten EquiformerV2 models used were:
+340
+• eqV2 dens 31M mp
+341
+• eqV2 dens 153M mp
+342
+• eqV2 dens 86M mp
+343
+• eqV2 31M mp
+344
+• eqV2 31M omat
+345
+• eqV2 153M omat
+346
+• eqV2 86M omat
+347
+• eqV2 31M omat mp salex
+348
+• eqV2 153M omat mp salex
+349
+• eqV2 86M omat mp salex
+350
+Adversarial
+attacks
+were
+performed
+on
+all
+10
+systems
+for
+the
+Orb
+potential
+351
+(orb-v3-direct-20-mpa) and on six representative systems for eqV2 dens 31M mp model.
+352
+A.4.3
+Materials Details
+353
+Our test set comprised 10 systems spanning solids (Mg17Al12, LGPS, ice, and MoF-5), surfaces
+354
+(CaPd-NH2), and molecules (Ac-Ala3-NHMe, stachyose, aspirin, paracetamol, and DHA taken
+355
+md22 dataset [51]).
+356
+A.4.4
+DFT Calculation Details
+357
+All ground-truth Density Functional Theory (DFT) calculations were performed with the Vienna Ab
+358
+initio Simulation Package (VASP). We used the Perdew-Burke-Ernzerhof (PBE) exchange-correlation
+359
+functional [52, 53]. All calculation parameters including k-point mesh densities were chosen to
+360
+be consistent with the Materials Project [54], ensuring convergence. For surface and molecular
+361
+calculations, structures were placed in a large simulation box with at least 15 ˚A of vacuum to ensure
+362
+no spurious interactions between periodic images.
+363
+10
+A.4.5
+Computational Cost
+364
+The Force Delta offers significant speed advantages over ensembles (5-10x faster). Compared to
+365
+single-model methods, the cost depends on the context. If a simulation typically uses the fast
+366
+ˆFnc, calculating U∆requires computing ˆFc (the backpropagation), which roughly doubles the
+367
+computational cost per step (∼2x overhead). If the simulation already uses ˆFc, the overhead is
+368
+negligible if ˆFnc is computed during the initial forward pass. This overhead is significantly less than
+369
+the cost of data-dependent methods, which require searching large training databases or training
+370
+separate statistical models.
+371
+11

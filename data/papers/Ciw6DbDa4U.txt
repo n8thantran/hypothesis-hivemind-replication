@@ -1,0 +1,1249 @@
+Surrogate Modeling for the Design of Optimal Lattice
+Structures using Tensor Completion
+Anonymous Author(s)
+Affiliation
+Address
+email
+Abstract
+When designing new materials, it is often necessary to design a material with
+1
+specific desired properties. Unfortunately, as new design variables are added, the
+2
+search space grows exponentially, which makes synthesizing and validating the
+3
+properties of each material very impractical and time-consuming. In this work,
+4
+we focus on the design of optimal lattice structures with regard to mechanical
+5
+performance. Computational approaches, including the use of machine learning
+6
+(ML) methods, have shown improved success in accelerating materials design.
+7
+However, these ML methods are still lacking in scenarios when training data (i.e.
+8
+experimentally validated materials) come from a non-uniformly random sampling
+9
+across the design space. For example, an experimentalist might synthesize and vali-
+10
+date certain materials more frequently because of convenience. For this reason, we
+11
+suggest the use of tensor completion as a surrogate model to accelerate the design
+12
+of materials in these atypical supervised learning scenarios. In our experiments, we
+13
+show that tensor completion is superior to classic ML methods such as Gaussian
+14
+Process and XGBoost with biased sampling of the search space, with around 5%
+15
+increased R2. Furthermore, tensor completion still gives comparable performance
+16
+with a uniformly random sampling of the entire search space.
+17
+1
+Introduction
+18
+Efficiently designing new materials with optimal properties can be a significant challenge due to
+19
+the explosive number of combinations as new design variables are introduced. When searching
+20
+for new materials with particular material property values, it can be very expensive to exhaustively
+21
+generate these combinations of materials. For this reason, there is growing interest in being able to
+22
+predict these material property values, without having to first produce the material. Computational
+23
+methods have shown great promise for inferring material property values, allowing material scientists
+24
+to quickly find materials with optimal properties. This includes the use of Density Functional Theory
+25
+(DFT) [8, 22, 19, 15], machine learning (ML) [3, 6, 9, 10, 13, 16, 23, 25], or both [20]. In this work,
+26
+we focus on designing optimal lattice structures, with regards to mechanical performance [6, 7].
+27
+Unfortunately, these ML methods still underachieve in scenarios where the training data does not
+28
+come from a uniformly random sample of the entire search space. This scenario may arise in
+29
+practice when an experimentalist might synthesize and validate certain materials of the design space
+30
+more than others, due to convenience. In order to overcome this, we abstract away the various
+31
+components of material design and instead model them as instances of tensor completion. Here,
+32
+each design parameter to be optimized corresponds to an individual mode of our tensor, so we can
+33
+leverage tensor completion algorithms to predict the entirety of the search space. In our experiments,
+34
+tensor completion methods provide nearly state-of-the-art performance in typical supervised learning
+35
+scenarios. Furthermore, we simulate an experimentalist performing experiments to serve as training
+36
+Submitted to 39th Conference on Neural Information Processing Systems (NeurIPS 2025). Do not distribute.
+data by unevenly sampling across design variables. In these scenarios, tensor completion gives better
+37
+results than other baseline ML methods, including Gaussian Process [24], XGBoost [5], and some
+38
+ensembles of multiple methods. Of these baseline methods, Gaussian Process performed the best in
+39
+our experiments so we show results compared against this.
+40
+2
+Methods
+41
+In this section we give a detailed description on the methods used in this work, including our pipeline
+42
+for surrogate modeling with tensor completion, its training, and the dataset used for evaluation.
+43
+2.1
+Tensor Completion for Surrogate Modeling
+44
+Figure 1: We present various material design problems as instances of tensor completion, in order to
+abstract away the various design components and use tensor methods to infer the entire search space.
+In Figure 1, we show the complete surrogate modeling pipeline we are proposing. After experimen-
+45
+tally determining the performance for various material structures, we can convert those observations
+46
+to entries of a tensor and use tensor completion to infer the performance of the remainder of the
+47
+design search space.
+48
+2.1.1
+Tensors & Tensor Decomposition
+49
+Tensors are a general term for multidimensional arrays. In other words, a 1st order tensor is just
+50
+a vector, and a 2nd order tensor is a matrix. In this work, we will be looking at higher order
+51
+tensors, denoted X . Tensor decomposition is a general term for expressing a tensor as several
+52
+smaller factors, and is an extension of matrix factorization to multidimensional datasets. A common
+53
+form of tensor decomposition is the Canonical Polyadic Decomposition (CPD) [12, 21]. CPD
+54
+expresses a tensor as a sum of rank-one tensors. A rank R CPD decomposition of a third-order tensor
+55
+X ∈RI×J×K would be expressed as: X ≈PR
+r=1(ar ◦br ◦cr), where ◦denotes outer product,
+56
+ar ∈RI, br ∈RJ, and cr ∈RK.
+57
+Tensor decomposition is a powerful tool, not only for data compression but also for analyzing
+58
+multidimensional datasets. For example, the smaller tensor factors are commonly used for pattern
+59
+discovery in these multidimensional datasets, and further more for tensor completion. Tensor
+60
+completion is the process of filling in the missing values of a tensor.
+61
+2.1.2
+Tensor Completion Training
+62
+We illustrate the training of our tensor completion models in Figure 2. We first randomly initialize
+63
+the factor matrices to generate an initial (random) reconstruction of the full tensor. Then we use
+64
+error of the observed tensor values and the associated predictions to iteratively get a more accurate
+65
+reconstruction of the full tensor. For our error function, we use Mean Absolute Error (MAE) =
+66
+2
+Figure 2: Here we visualize the training process, where we iteratively update our factor matrices to
+produce a better tensor reconstruction. The gray regions in the factor matrices and predicted tensor
+correspond to predicted values for which we do not have the ground truth during training.
+1
+n
+Pn
+i=1 |yi −ˆyi|. To optimize the parameters (factor matrices) with regards to this error term, we
+67
+use the Adam optimizer [11].
+68
+2.1.3
+Tensor Completion Models
+69
+There are several classes of tensor completion methods. There are classical methods such as CPD
+70
+[12] and TuckER [4], and there are more advanced neural tensor completion methods such as NeAT
+71
+[2] or CoSTCo [14], which leverage the use of neural networks in addition to tensor decomposition.
+72
+For our experiments, we use CPD-S (a CPD-based method that imposes smoothness constraints on
+73
+some of the tensor factors) [1, 17], NeAT [2], and an ensemble tensor completion method to aggregate
+74
+the results of multiple tensor completion algorithms. For our results, we only display an ensemble of
+75
+CPD-S with different ranks, and a NeAT model as it showed the best performance on this dataset.
+76
+2.2
+Baseline Comparisons
+77
+In this work, we compare our tensor completion methods against Gaussian Process, XGBoost, Multi-
+78
+Layer Perceptrons (MLPs), and using an ensemble of several ML methods. Due to limited space, we
+79
+only show the results for Gaussian Process, as it showed the best results of the baseline comparisons
+80
+on this dataset.
+81
+2.3
+Dataset Description
+82
+To verify the utility of using tensor completion as a surrogate model for lattice structure design, we
+83
+use the dataset from Gongora et al. [6] with various lattice structures’ design components and the
+84
+corresponding mechanical performance. Mechanical performance is characterized using the Young’s
+85
+modulus (E) values and the ratio between E and the design’s mass m ( ˜E). These are essential
+86
+mechanical properties to describe the elastic behavior of a structure under an applied force [6].
+87
+3
+Experiments
+88
+In this section, we experimentally validate our method in a variety of settings, with uniformly random
+89
+and biased random sampling of the trainset, with varying training sizes.
+90
+3.1
+Tensor Completion Performance
+91
+From Figure 3 we see that tensor completion gives good results in typical supervised learning tasks
+92
+(i.e. uniform random sampling). However, in this scenario, we can achieve better results with less
+93
+data using a Gaussian Process.
+94
+3
+(a) Parity Plot for Testing Values
+(b) Efficiency Analysis
+Figure 3: In (a) we display a parity plot for predicting E and ˜E simultaneously. We use 100 train and
+170 test values. In (b) we display the R2 for a uniform random sampling of different training sizes.
+We show the mean and standard deviation on the test set, using 5 iterations for each train size.
+3.2
+Biased Sampling
+95
+Here we observe the performance of surrogate modeling when the training data is not uniformly
+96
+randomly sampled throughout the search space. We sample a different number of training values
+97
+for each value of a design variable. The goal here is to simulate an experimentalist who might have
+98
+conducted more experiments in a specific region of the search space, rather than uniformly sampling
+99
+throughout the entire search space. This is useful if a certain region of the search space is cheaper or
+100
+more convenient (e.g. with regards to time or money) to experimentally validate than others.
+101
+(a) Example of biased sampling
+(b) R2 value for biased sampling experiments
+Figure 4: In (a) we visualize how the search space might be sampled in a biased manner. In (b), we
+conduct experiments for a biased-random sampling of the search space. We show the average and
+standard deviation of the R2 for 5 iterations. Going from experiment 1 to 10, we decrease the bias in
+sampling by making the range smaller. Details on the generation of number of training samples and
+exact number of training samples for each value are discussed in the appendix section in Table 1.
+From Figure 4 we observe that tensor completion methods are better in handling a biased sampling in
+102
+the training set, and less prone to overfitting to the observed values. This makes tensor completion
+103
+very useful for a wider variety of real-world scenarios than standard supervised learning techniques.
+104
+4
+Conclusion
+105
+In this work, we cast the design of optimal lattice structures with respect to mechanical performance
+106
+as an example of a tensor completion problem. In this way, we are able to handle both typical
+107
+(uniformly random sampling) and atypical (biased sampling) supervised learning problems in order
+108
+to accelerate the design of optimal lattice structures. For these reasons, tensor completion could be a
+109
+promising surrogate model to accelerate the search for optimal lattice structures with exponentially
+110
+increasing design space.
+111
+4
+References
+112
+[1] Dawon Ahn, Jun-Gi Jang, and U Kang. Time-aware tensor decomposition for sparse tensors.
+113
+In 2021 IEEE 8th International Conference on Data Science and Advanced Analytics (DSAA),
+114
+pages 1–2. IEEE, 2021.
+115
+[2] Dawon Ahn, Uday Singh Saini, Evangelos E Papalexakis, and Ali Payani. Neural additive
+116
+tensor decomposition for sparse tensors. In 33rd ACM International Conference on Information
+117
+and Knowledge Management. ACM, 2024.
+118
+[3] Kirstin Alberi, Marco Buongiorno Nardelli, Andriy Zakutayev, Lubos Mitas, Stefano Curtarolo,
+119
+Anubhav Jain, Marco Fornari, Nicola Marzari, Ichiro Takeuchi, Martin L Green, et al. The 2019
+120
+materials by design roadmap. Journal of Physics D: Applied Physics, 52(1):013001, 2018.
+121
+[4] Ivana Balaževi´c, Carl Allen, and Timothy M Hospedales. Tucker: Tensor factorization for
+122
+knowledge graph completion. In Empirical Methods in Natural Language Processing, 2019.
+123
+[5] Tianqi Chen and Carlos Guestrin. Xgboost: A scalable tree boosting system. In Proceedings of
+124
+the 22nd acm sigkdd international conference on knowledge discovery and data mining, pages
+125
+785–794, 2016.
+126
+[6] Aldair E Gongora, Caleb Friedman, Deirdre K Newton, Timothy D Yee, Zachary Doorenbos,
+127
+Brian Giera, Eric B Duoss, Thomas Y-J Han, Kyle Sullivan, and Jennifer N Rodriguez. Acceler-
+128
+ating the design of lattice structures using machine learning. Scientific Reports, 14(1):13703,
+129
+2024.
+130
+[7] Aldair E Gongora, Siddharth Mysore, Beichen Li, Wan Shou, Wojciech Matusik, Elise F
+131
+Morgan, Keith A Brown, and Emily Whiting. Designing composites with target effective young’s
+132
+modulus using reinforcement learning. In Proceedings of the 6th annual ACM symposium on
+133
+computational fabrication, pages 1–11, 2021.
+134
+[8] Jürgen Hafner, Christopher Wolverton, and Gerbrand Ceder. Toward computational materials
+135
+design: the impact of density functional theory on materials research. MRS bulletin, 31(9):659–
+136
+668, 2006.
+137
+[9] Yousof Haghshenas, Wei Ping Wong, Vidhyasaharan Sethu, Rose Amal, Priyank Vijaya Kumar,
+138
+and Wey Yang Teoh. Full prediction of band potentials in semiconductor materials. Materials
+139
+Today Physics, 46:101519, 2024.
+140
+[10] Jeffrey Hu, David Liu, Nihang Fu, and Rongzhi Dong. Realistic material property prediction
+141
+using domain adaptation based machine learning. Digital Discovery, 3(2):300–312, 2024.
+142
+[11] Diederik P Kingma.
+Adam:
+A method for stochastic optimization.
+arXiv preprint
+143
+arXiv:1412.6980, 2014.
+144
+[12] T.G. Kolda and B.W. Bader. Tensor decompositions and applications. SIAM review, 51(3),
+145
+2009.
+146
+[13] Qin Li, Nihang Fu, Sadman Sadeed Omee, and Jianjun Hu. Md-hit: Machine learning for
+147
+material property prediction with dataset redundancy control. npj Computational Materials,
+148
+10(1):245, 2024.
+149
+[14] Hanpeng Liu, Yaguang Li, Michael Tsang, and Yan Liu. Costco: A neural tensor completion
+150
+model for sparse tensors. In Proceedings of the 25th ACM SIGKDD International Conference
+151
+on Knowledge Discovery & Data Mining, pages 324–334, 2019.
+152
+[15] Priyanka Makkar and Narendra Nath Ghosh. A review on the use of dft for the prediction of the
+153
+properties of nanomaterials. RSC advances, 11(45):27897–27924, 2021.
+154
+[16] Shaan Pakala, Dawon Ahn, and Evangelos Papalexakis. Tensor completion for surrogate
+155
+modeling of material property prediction. arXiv preprint arXiv:2501.18137, 2025.
+156
+5
+[17] Shaan Pakala, Bryce Graw, Dawon Ahn, Tam Dinh, Mehnaz Tabassum Mahin, Vassilis Tsotras,
+157
+Jia Chen, and Evangelos E. Papalexakis.
+Automating data science pipelines with tensor
+158
+completion. In 2024 IEEE International Conference on Big Data (BigData), pages 1075–1084,
+159
+2024.
+160
+[18] F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel,
+161
+P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher,
+162
+M. Perrot, and E. Duchesnay. Scikit-learn: Machine learning in Python. Journal of Machine
+163
+Learning Research, 12:2825–2830, 2011.
+164
+[19] Gabriel R Schleder, Antonio CM Padilha, Carlos Mera Acosta, Marcio Costa, and Adalberto
+165
+Fazzio. From dft to machine learning: recent approaches to materials science–a review. Journal
+166
+of Physics: Materials, 2(3):032001, 2019.
+167
+[20] Atsuto Seko, Tomoya Maekawa, Koji Tsuda, and Isao Tanaka. Machine learning with systematic
+168
+density-functional theory calculations: Application to melting temperatures of single-and binary-
+169
+component solids. Physical Review B, 89(5):054303, 2014.
+170
+[21] Nicholas D Sidiropoulos, Lieven De Lathauwer, Xiao Fu, Kejun Huang, Evangelos E Papalex-
+171
+akis, and Christos Faloutsos. Tensor decomposition for signal processing and machine learning.
+172
+IEEE Signal Processing Magazine, 2016.
+173
+[22] Pragya Verma and Donald G Truhlar. Status and challenges of density functional theory. Trends
+174
+in Chemistry, 2(4):302–318, 2020.
+175
+[23] Yuhao Wang, Yefan Tian, Tanner Kirk, Omar Laris, Joseph H Ross Jr, Ronald D Noebe,
+176
+Vladimir Keylin, and Raymundo Arróyave. Accelerated design of fe-based soft magnetic
+177
+materials using machine learning and stochastic optimization. Acta Materialia, 194:144–155,
+178
+2020.
+179
+[24] Christopher Williams and Carl Rasmussen. Gaussian processes for regression. Advances in
+180
+neural information processing systems, 8, 1995.
+181
+[25] Ya Zhuo, Aria Mansouri Tehrani, and Jakoah Brgoch. Predicting the band gaps of inorganic
+182
+solids by machine learning. The journal of physical chemistry letters, 9(7):1668–1673, 2018.
+183
+A
+Appendix
+184
+A.1
+Limitations
+185
+The main limitation of this work is considering typical supervised learning scenarios, when the
+186
+training data comes from a uniformly random sampling of the entire data or search space. In our
+187
+experiments, we see that a Gaussian Process exhibits superior performance in these scenarios.
+188
+A.2
+Experimental Details
+189
+All code used for experiments can be found at https://anonymous.4open.science/
+190
+r/Surrogate-Modeling-for-the-Design-of-Optimal-Lattice-Structures-using-
+191
+Tensor-Completion-36BF. However, we cannot release the dataset due to the dataset owner’s
+192
+institutional regulations. More dataset details can be found on the original paper [6].
+193
+A.2.1
+Hardware
+194
+Experiments were fairly lightweight to run. They all were conducted using a MacBook Air 2020
+195
+laptop with an Apple M1 chip (8GB).
+196
+6
+A.2.2
+ML Models
+197
+For our experiments, we used an ensemble tensor completion method consisting of a NeAT Rank
+198
+24 & 32, CPD Ranks 1, 2, & 4, and CPD-S Ranks 1, 2, & 4. Each model was trained using Adam
+199
+optimizer [11] with a learning rate and weight decay of 0.01, using MAE as the objective function. A
+200
+random forest regression using 100 trees was used to aggregate the results of the tensor models.
+201
+For our baseline methods, we tried a variety of XGBoost, MLPs, and Gaussian Process models using
+202
+Scikit-Learn [18]. The best of the baselines (and only one shown in the experiments due to space
+203
+constraints) was a Gaussian Process with kernel = ConstantKernel(1.0, (1e-3, 1e3)) × RBF(1.0, (1e-2,
+204
+1e2)) + WhiteKernel(1e-3, (1e-5, 1e1)) using Scikit-Learn’s Gaussian Process kernel functions, and
+205
+an alpha value = 0.01. These were determined empirically by comparing the performance of various
+206
+hyperparameter values.
+207
+A.2.3
+Section 3.2 Biased Sampling details
+208
+Experiment
+Gyroid
+Schwarz
+Diamond
+Lidinoid
+Split P
+Range
+1
+40
+21
+7
+6
+3
+[3, 40]
+2
+14
+21
+5
+5
+40
+[5, 40]
+3
+8
+23
+7
+15
+40
+[7, 40]
+4
+9
+24
+12
+19
+40
+[9, 40]
+5
+11
+21
+16
+40
+25
+[11, 40]
+6
+14
+13
+40
+22
+35
+[13, 40]
+7
+36
+15
+28
+40
+16
+[15, 40]
+8
+40
+17
+21
+28
+37
+[17, 40]
+9
+30
+35
+29
+19
+40
+[19, 40]
+10
+34
+40
+32
+39
+21
+[21, 40]
+Table 1: Number of training samples used for each experiment in Figure 4. Each unit cell geometry
+type (i.e. tensor slice) has 54 total values (54 values × 5 slices = 270 total values in search space).
+For each experiment, the number of training samples for each unit cell geometry type comes from an
+exponential distribution with scale = 1. This was to create a high disparity in the number of samples
+for each value. We then converted this exponential distribution to be in the range [l, 40], where
+l = 3 + 2 × enum (enum is the current experiment number), and then rounded to the nearest integer
+value. This was to iteratively decrease the bias in sampling, by making the range of values smaller
+(i.e. increasing the lower bound l) as we go from experiment 1 to experiment 10. We start with
+experiment 1 from an exponential distribution on the range [3, 40], and we end with experiment 10
+on the range [21, 40].
+7
+NeurIPS Paper Checklist
+209
+1. Claims
+210
+Question: Do the main claims made in the abstract and introduction accurately reflect the
+211
+paper’s contributions and scope?
+212
+Answer: [Yes]
+213
+Justification: We state that our tensor methods are nearly (not better than) state-of-the-art
+214
+in standard supervised learning scenarios, where we train on a uniformly random sample
+215
+of the entire data. We do suggest that tensor methods could offer improvement in biased
+216
+sampling scenarios, which may represent an actual experimentalists’ training data, and we
+217
+conduct experiments in Section 3.2 to demonstrate this.
+218
+Guidelines:
+219
+• The answer NA means that the abstract and introduction do not include the claims
+220
+made in the paper.
+221
+• The abstract and/or introduction should clearly state the claims made, including the
+222
+contributions made in the paper and important assumptions and limitations. A No or
+223
+NA answer to this question will not be perceived well by the reviewers.
+224
+• The claims made should match theoretical and experimental results, and reflect how
+225
+much the results can be expected to generalize to other settings.
+226
+• It is fine to include aspirational goals as motivation as long as it is clear that these goals
+227
+are not attained by the paper.
+228
+2. Limitations
+229
+Question: Does the paper discuss the limitations of the work performed by the authors?
+230
+Answer: [Yes]
+231
+Justification: We are transparent in the fact that standard supervised learning models (e.g.
+232
+Gaussian Process) may outperform tensor models in “regular” supervised learning problems,
+233
+with a uniform random sampling of the search space.
+234
+Guidelines:
+235
+• The answer NA means that the paper has no limitation while the answer No means that
+236
+the paper has limitations, but those are not discussed in the paper.
+237
+• The authors are encouraged to create a separate "Limitations" section in their paper.
+238
+• The paper should point out any strong assumptions and how robust the results are to
+239
+violations of these assumptions (e.g., independence assumptions, noiseless settings,
+240
+model well-specification, asymptotic approximations only holding locally). The authors
+241
+should reflect on how these assumptions might be violated in practice and what the
+242
+implications would be.
+243
+• The authors should reflect on the scope of the claims made, e.g., if the approach was
+244
+only tested on a few datasets or with a few runs. In general, empirical results often
+245
+depend on implicit assumptions, which should be articulated.
+246
+• The authors should reflect on the factors that influence the performance of the approach.
+247
+For example, a facial recognition algorithm may perform poorly when image resolution
+248
+is low or images are taken in low lighting. Or a speech-to-text system might not be
+249
+used reliably to provide closed captions for online lectures because it fails to handle
+250
+technical jargon.
+251
+• The authors should discuss the computational efficiency of the proposed algorithms
+252
+and how they scale with dataset size.
+253
+• If applicable, the authors should discuss possible limitations of their approach to
+254
+address problems of privacy and fairness.
+255
+• While the authors might fear that complete honesty about limitations might be used by
+256
+reviewers as grounds for rejection, a worse outcome might be that reviewers discover
+257
+limitations that aren’t acknowledged in the paper. The authors should use their best
+258
+judgment and recognize that individual actions in favor of transparency play an impor-
+259
+tant role in developing norms that preserve the integrity of the community. Reviewers
+260
+will be specifically instructed to not penalize honesty concerning limitations.
+261
+8
+3. Theory assumptions and proofs
+262
+Question: For each theoretical result, does the paper provide the full set of assumptions and
+263
+a complete (and correct) proof?
+264
+Answer: [NA]
+265
+Justification: We do not have any theoretical results, we just discuss empirical results which
+266
+we conduct experiments to justify.
+267
+Guidelines:
+268
+• The answer NA means that the paper does not include theoretical results.
+269
+• All the theorems, formulas, and proofs in the paper should be numbered and cross-
+270
+referenced.
+271
+• All assumptions should be clearly stated or referenced in the statement of any theorems.
+272
+• The proofs can either appear in the main paper or the supplemental material, but if
+273
+they appear in the supplemental material, the authors are encouraged to provide a short
+274
+proof sketch to provide intuition.
+275
+• Inversely, any informal proof provided in the core of the paper should be complemented
+276
+by formal proofs provided in appendix or supplemental material.
+277
+• Theorems and Lemmas that the proof relies upon should be properly referenced.
+278
+4. Experimental result reproducibility
+279
+Question: Does the paper fully disclose all the information needed to reproduce the main ex-
+280
+perimental results of the paper to the extent that it affects the main claims and/or conclusions
+281
+of the paper (regardless of whether the code and data are provided or not)?
+282
+Answer: [No]
+283
+Justification: Justification: We give all code required to reproduce the results; however, due
+284
+to the original dataset owner’s institutional regulations, we are not allowed to release the
+285
+dataset. Further details on the dataset can be found in the original paper [6].
+286
+Guidelines:
+287
+• The answer NA means that the paper does not include experiments.
+288
+• If the paper includes experiments, a No answer to this question will not be perceived
+289
+well by the reviewers: Making the paper reproducible is important, regardless of
+290
+whether the code and data are provided or not.
+291
+• If the contribution is a dataset and/or model, the authors should describe the steps taken
+292
+to make their results reproducible or verifiable.
+293
+• Depending on the contribution, reproducibility can be accomplished in various ways.
+294
+For example, if the contribution is a novel architecture, describing the architecture fully
+295
+might suffice, or if the contribution is a specific model and empirical evaluation, it may
+296
+be necessary to either make it possible for others to replicate the model with the same
+297
+dataset, or provide access to the model. In general. releasing code and data is often
+298
+one good way to accomplish this, but reproducibility can also be provided via detailed
+299
+instructions for how to replicate the results, access to a hosted model (e.g., in the case
+300
+of a large language model), releasing of a model checkpoint, or other means that are
+301
+appropriate to the research performed.
+302
+• While NeurIPS does not require releasing code, the conference does require all submis-
+303
+sions to provide some reasonable avenue for reproducibility, which may depend on the
+304
+nature of the contribution. For example
+305
+(a) If the contribution is primarily a new algorithm, the paper should make it clear how
+306
+to reproduce that algorithm.
+307
+(b) If the contribution is primarily a new model architecture, the paper should describe
+308
+the architecture clearly and fully.
+309
+(c) If the contribution is a new model (e.g., a large language model), then there should
+310
+either be a way to access this model for reproducing the results or a way to reproduce
+311
+the model (e.g., with an open-source dataset or instructions for how to construct
+312
+the dataset).
+313
+9
+(d) We recognize that reproducibility may be tricky in some cases, in which case
+314
+authors are welcome to describe the particular way they provide for reproducibility.
+315
+In the case of closed-source models, it may be that access to the model is limited in
+316
+some way (e.g., to registered users), but it should be possible for other researchers
+317
+to have some path to reproducing or verifying the results.
+318
+5. Open access to data and code
+319
+Question: Does the paper provide open access to the data and code, with sufficient instruc-
+320
+tions to faithfully reproduce the main experimental results, as described in supplemental
+321
+material?
+322
+Answer: [No]
+323
+Justification: Justification: We give all code required to reproduce the results; however, due
+324
+to the original dataset owner’s institutional regulations, we are not allowed to release the
+325
+dataset. Further details on the dataset can be found in the original paper [6].
+326
+Guidelines:
+327
+• The answer NA means that paper does not include experiments requiring code.
+328
+• Please see the NeurIPS code and data submission guidelines (https://nips.cc/
+329
+public/guides/CodeSubmissionPolicy) for more details.
+330
+• While we encourage the release of code and data, we understand that this might not be
+331
+possible, so “No” is an acceptable answer. Papers cannot be rejected simply for not
+332
+including code, unless this is central to the contribution (e.g., for a new open-source
+333
+benchmark).
+334
+• The instructions should contain the exact command and environment needed to run to
+335
+reproduce the results. See the NeurIPS code and data submission guidelines (https:
+336
+//nips.cc/public/guides/CodeSubmissionPolicy) for more details.
+337
+• The authors should provide instructions on data access and preparation, including how
+338
+to access the raw data, preprocessed data, intermediate data, and generated data, etc.
+339
+• The authors should provide scripts to reproduce all experimental results for the new
+340
+proposed method and baselines. If only a subset of experiments are reproducible, they
+341
+should state which ones are omitted from the script and why.
+342
+• At submission time, to preserve anonymity, the authors should release anonymized
+343
+versions (if applicable).
+344
+• Providing as much information as possible in supplemental material (appended to the
+345
+paper) is recommended, but including URLs to data and code is permitted.
+346
+6. Experimental setting/details
+347
+Question: Does the paper specify all the training and test details (e.g., data splits, hyper-
+348
+parameters, how they were chosen, type of optimizer, etc.) necessary to understand the
+349
+results?
+350
+Answer: [Yes]
+351
+Justification: We discuss all training details for the experiments (further details in the
+352
+appendix section).
+353
+Guidelines:
+354
+• The answer NA means that the paper does not include experiments.
+355
+• The experimental setting should be presented in the core of the paper to a level of detail
+356
+that is necessary to appreciate the results and make sense of them.
+357
+• The full details can be provided either with the code, in appendix, or as supplemental
+358
+material.
+359
+7. Experiment statistical significance
+360
+Question: Does the paper report error bars suitably and correctly defined or other appropriate
+361
+information about the statistical significance of the experiments?
+362
+Answer: [Yes]
+363
+Justification: For each experiment (and sub-experiment), we perform 5 iterations and display
+364
+both the mean and error bars (standard deviation) of the 5 iterations.
+365
+10
+Guidelines:
+366
+• The answer NA means that the paper does not include experiments.
+367
+• The authors should answer "Yes" if the results are accompanied by error bars, confi-
+368
+dence intervals, or statistical significance tests, at least for the experiments that support
+369
+the main claims of the paper.
+370
+• The factors of variability that the error bars are capturing should be clearly stated (for
+371
+example, train/test split, initialization, random drawing of some parameter, or overall
+372
+run with given experimental conditions).
+373
+• The method for calculating the error bars should be explained (closed form formula,
+374
+call to a library function, bootstrap, etc.)
+375
+• The assumptions made should be given (e.g., Normally distributed errors).
+376
+• It should be clear whether the error bar is the standard deviation or the standard error
+377
+of the mean.
+378
+• It is OK to report 1-sigma error bars, but one should state it. The authors should
+379
+preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis
+380
+of Normality of errors is not verified.
+381
+• For asymmetric distributions, the authors should be careful not to show in tables or
+382
+figures symmetric error bars that would yield results that are out of range (e.g. negative
+383
+error rates).
+384
+• If error bars are reported in tables or plots, The authors should explain in the text how
+385
+they were calculated and reference the corresponding figures or tables in the text.
+386
+8. Experiments compute resources
+387
+Question: For each experiment, does the paper provide sufficient information on the com-
+388
+puter resources (type of compute workers, memory, time of execution) needed to reproduce
+389
+the experiments?
+390
+Answer: [Yes]
+391
+Justification: We cover this in the appendix section.
+392
+Guidelines:
+393
+• The answer NA means that the paper does not include experiments.
+394
+• The paper should indicate the type of compute workers CPU or GPU, internal cluster,
+395
+or cloud provider, including relevant memory and storage.
+396
+• The paper should provide the amount of compute required for each of the individual
+397
+experimental runs as well as estimate the total compute.
+398
+• The paper should disclose whether the full research project required more compute
+399
+than the experiments reported in the paper (e.g., preliminary or failed experiments that
+400
+didn’t make it into the paper).
+401
+9. Code of ethics
+402
+Question: Does the research conducted in the paper conform, in every respect, with the
+403
+NeurIPS Code of Ethics https://neurips.cc/public/EthicsGuidelines?
+404
+Answer: [Yes]
+405
+Justification: We have reviewed the code of ethics. We do not use any human research
+406
+subjects, provide any code/software that could inflict any harm, and we are as transparent as
+407
+possible with the experiments and results in this work.
+408
+Guidelines:
+409
+• The answer NA means that the authors have not reviewed the NeurIPS Code of Ethics.
+410
+• If the authors answer No, they should explain the special circumstances that require a
+411
+deviation from the Code of Ethics.
+412
+• The authors should make sure to preserve anonymity (e.g., if there is a special consid-
+413
+eration due to laws or regulations in their jurisdiction).
+414
+10. Broader impacts
+415
+Question: Does the paper discuss both potential positive societal impacts and negative
+416
+societal impacts of the work performed?
+417
+11
+Answer: [Yes]
+418
+Justification: We discuss how using tensor methods to navigate the search space may be
+419
+beneficial to experimentalists who conduct experiments in a biased manner. This may limit
+420
+the required costs of generating a uniformly random sample of the entire search space and
+421
+allow a more convenient navigation of the search space.
+422
+Guidelines:
+423
+• The answer NA means that there is no societal impact of the work performed.
+424
+• If the authors answer NA or No, they should explain why their work has no societal
+425
+impact or why the paper does not address societal impact.
+426
+• Examples of negative societal impacts include potential malicious or unintended uses
+427
+(e.g., disinformation, generating fake profiles, surveillance), fairness considerations
+428
+(e.g., deployment of technologies that could make decisions that unfairly impact specific
+429
+groups), privacy considerations, and security considerations.
+430
+• The conference expects that many papers will be foundational research and not tied
+431
+to particular applications, let alone deployments. However, if there is a direct path to
+432
+any negative applications, the authors should point it out. For example, it is legitimate
+433
+to point out that an improvement in the quality of generative models could be used to
+434
+generate deepfakes for disinformation. On the other hand, it is not needed to point out
+435
+that a generic algorithm for optimizing neural networks could enable people to train
+436
+models that generate Deepfakes faster.
+437
+• The authors should consider possible harms that could arise when the technology is
+438
+being used as intended and functioning correctly, harms that could arise when the
+439
+technology is being used as intended but gives incorrect results, and harms following
+440
+from (intentional or unintentional) misuse of the technology.
+441
+• If there are negative societal impacts, the authors could also discuss possible mitigation
+442
+strategies (e.g., gated release of models, providing defenses in addition to attacks,
+443
+mechanisms for monitoring misuse, mechanisms to monitor how a system learns from
+444
+feedback over time, improving the efficiency and accessibility of ML).
+445
+11. Safeguards
+446
+Question: Does the paper describe safeguards that have been put in place for responsible
+447
+release of data or models that have a high risk for misuse (e.g., pretrained language models,
+448
+image generators, or scraped datasets)?
+449
+Answer: [NA]
+450
+Justification: This paper poses no such risk, we are just suggesting a tool that may be useful
+451
+for experimentalists to accelerate the search of an exponentially large search space for
+452
+developing optimal materials.
+453
+Guidelines:
+454
+• The answer NA means that the paper poses no such risks.
+455
+• Released models that have a high risk for misuse or dual-use should be released with
+456
+necessary safeguards to allow for controlled use of the model, for example by requiring
+457
+that users adhere to usage guidelines or restrictions to access the model or implementing
+458
+safety filters.
+459
+• Datasets that have been scraped from the Internet could pose safety risks. The authors
+460
+should describe how they avoided releasing unsafe images.
+461
+• We recognize that providing effective safeguards is challenging, and many papers do
+462
+not require this, but we encourage authors to take this into account and make a best
+463
+faith effort.
+464
+12. Licenses for existing assets
+465
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in
+466
+the paper, properly credited and are the license and terms of use explicitly mentioned and
+467
+properly respected?
+468
+Answer: [Yes]
+469
+12
+Justification: We use the dataset from the work of Gongora et al. [6] and discuss this in the
+470
+dataset description. Besdies this, the code used was either developed by the authors of this
+471
+work, or properly cited.
+472
+Guidelines:
+473
+• The answer NA means that the paper does not use existing assets.
+474
+• The authors should cite the original paper that produced the code package or dataset.
+475
+• The authors should state which version of the asset is used and, if possible, include a
+476
+URL.
+477
+• The name of the license (e.g., CC-BY 4.0) should be included for each asset.
+478
+• For scraped data from a particular source (e.g., website), the copyright and terms of
+479
+service of that source should be provided.
+480
+• If assets are released, the license, copyright information, and terms of use in the
+481
+package should be provided. For popular datasets, paperswithcode.com/datasets
+482
+has curated licenses for some datasets. Their licensing guide can help determine the
+483
+license of a dataset.
+484
+• For existing datasets that are re-packaged, both the original license and the license of
+485
+the derived asset (if it has changed) should be provided.
+486
+• If this information is not available online, the authors are encouraged to reach out to
+487
+the asset’s creators.
+488
+13. New assets
+489
+Question: Are new assets introduced in the paper well documented and is the documentation
+490
+provided alongside the assets?
+491
+Answer: [NA]
+492
+Justification: No new assets are released in this work.
+493
+Guidelines:
+494
+• The answer NA means that the paper does not release new assets.
+495
+• Researchers should communicate the details of the dataset/code/model as part of their
+496
+submissions via structured templates. This includes details about training, license,
+497
+limitations, etc.
+498
+• The paper should discuss whether and how consent was obtained from people whose
+499
+asset is used.
+500
+• At submission time, remember to anonymize your assets (if applicable). You can either
+501
+create an anonymized URL or include an anonymized zip file.
+502
+14. Crowdsourcing and research with human subjects
+503
+Question: For crowdsourcing experiments and research with human subjects, does the paper
+504
+include the full text of instructions given to participants and screenshots, if applicable, as
+505
+well as details about compensation (if any)?
+506
+Answer: [NA]
+507
+Justification: No crowdsourcing or research with human subjects was conducted in this
+508
+work.
+509
+Guidelines:
+510
+• The answer NA means that the paper does not involve crowdsourcing nor research with
+511
+human subjects.
+512
+• Including this information in the supplemental material is fine, but if the main contribu-
+513
+tion of the paper involves human subjects, then as much detail as possible should be
+514
+included in the main paper.
+515
+• According to the NeurIPS Code of Ethics, workers involved in data collection, curation,
+516
+or other labor should be paid at least the minimum wage in the country of the data
+517
+collector.
+518
+15. Institutional review board (IRB) approvals or equivalent for research with human
+519
+subjects
+520
+13
+Question: Does the paper describe potential risks incurred by study participants, whether
+521
+such risks were disclosed to the subjects, and whether Institutional Review Board (IRB)
+522
+approvals (or an equivalent approval/review based on the requirements of your country or
+523
+institution) were obtained?
+524
+Answer: [NA]
+525
+Justification: No research with human subjects was conducted in this work.
+526
+Guidelines:
+527
+• The answer NA means that the paper does not involve crowdsourcing nor research with
+528
+human subjects.
+529
+• Depending on the country in which research is conducted, IRB approval (or equivalent)
+530
+may be required for any human subjects research. If you obtained IRB approval, you
+531
+should clearly state this in the paper.
+532
+• We recognize that the procedures for this may vary significantly between institutions
+533
+and locations, and we expect authors to adhere to the NeurIPS Code of Ethics and the
+534
+guidelines for their institution.
+535
+• For initial submissions, do not include any information that would break anonymity (if
+536
+applicable), such as the institution conducting the review.
+537
+16. Declaration of LLM usage
+538
+Question: Does the paper describe the usage of LLMs if it is an important, original, or
+539
+non-standard component of the core methods in this research? Note that if the LLM is used
+540
+only for writing, editing, or formatting purposes and does not impact the core methodology,
+541
+scientific rigorousness, or originality of the research, declaration is not required.
+542
+Answer: [NA]
+543
+Justification: LLMs were not used to develop any core methods.
+544
+Guidelines:
+545
+• The answer NA means that the core method development in this research does not
+546
+involve LLMs as any important, original, or non-standard components.
+547
+• Please refer to our LLM policy (https://neurips.cc/Conferences/2025/LLM)
+548
+for what should or should not be described.
+549
+14

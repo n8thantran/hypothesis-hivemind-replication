@@ -1,0 +1,631 @@
+Towards Fully Automated Molecular Simulations:
+Multi-Agent Framework for Simulation Setup and
+Force Field Extraction
+Marko Petkovi´c
+Applied Physics and Science Education
+Eindhoven University of Technology
+Vlado Menkovski
+Mathematics and Computer Science
+Eindhoven University of Technology
+Sofía Calero
+Applied Physics and Science Education
+Eindhoven University of Technology
+{m.petkovic1, v.menkovski, s.calero}@tue.nl
+Abstract
+Automated characterization of porous materials has the potential to accelerate
+materials discovery, but it remains limited by the complexity of simulation setup
+and force field selection. We propose a multi-agent framework in which LLM-
+based agents can autonomously understand a characterization task, plan appropriate
+simulations, assemble relevant force fields, execute them and interpret their re-
+sults to guide subsequent steps. As a first step toward this vision, we present a
+multi-agent system for literature-informed force field extraction and automated
+RASPA simulation setup. Initial evaluations demonstrate high correctness and
+reproducibility, highlighting this approach’s potential to enable fully autonomous,
+scalable materials characterization.
+1
+Introduction
+Porous materials, such as metal–organic frameworks (MOFs) and zeolites, are central to applications
+in energy storage, gas separation, catalysis, and carbon capture [9, 17, 21]. The design of novel
+porous materials with improved performance can have significant societal and environmental benefits.
+Molecular simulations play an important role in this process, as they provide molecular-level insights
+into adsorption and diffusion that are often inaccessible to experiments [10, 13, 30]. By revealing how
+structural features influence adsorption and transport, simulations can identify promising candidates
+and guide experimental efforts, thereby accelerating the discovery of porous materials [8, 36].
+The adoption of molecular simulations for porous materials is limited by several technical challenges.
+Outcomes are highly sensitive to the choice of force fields and charge assignment methods, with
+studies showing that different protocols can result in markedly different adsorption predictions
+and even alter material rankings [7]. Maintaining reproducibility is also difficult, as variations in
+workflows, such as charge schemes, cutoff definitions, or structure curation, may hinder cross-study
+comparability [25]. Moreover, the diversity of force fields and their associated parameters requires
+deep expertise to select and apply them correctly [15]. These challenges create a barrier for wider use
+of simulations as a routine characterization tool.
+Automated characterization of porous materials presents a multifaceted challenge, primarily due to
+the necessity for intelligent planning. Agents must determine the appropriate simulations to conduct,
+adapt workflows based on interim results, select or design accurate force fields, and generalize
+across diverse topologies, adsorbates, and conditions. Recent advances in large language models
+Preprint.
+(LLMs) have demonstrated their capability to address these complexities [3, 23, 26, 29]. LLMs
+have been shown to effectively generate structured workflows, interpret complex scientific tasks
+and synthesize executable simulation code, thereby facilitating the automation of intricate scientific
+processes [11, 37, 39, 41]. Their proficiency in integrating heterogeneous knowledge and performing
+flexible reasoning and multi-step planning makes them well-suited for orchestrating the adaptive
+workflows required in materials characterization [4, 20]. Furthermore, LLMs have been utilized to
+automate research workflows, including experimental protocol planning and scientific code generation,
+underscoring their potential in scientific automation [6, 22, 27, 35].
+User
+Experiment 
+Planning
+Team
+Experiment 
+Setup
+Team
+Experiment 
+Analysis
+Team
+Research
+Team
+Simulator
+Global
+Memory
+Figure 1: Vision of an autonomous multi-agent system for molecular simulations. The Experiment
+Planning Team coordinates research, setup, and analysis teams through a shared global memory,
+enabling iterative workflows in which user queries result in literature-derived force fields, RASPA
+simulations, and analysis of results.
+Our goal is to develop a system that, given an experimental measurement or user request, can
+autonomously plan and execute the necessary steps to identify or design suitable force fields and
+then perform characterization simulations (Figure 1). By automating both the selection of physically
+accurate force fields and the execution of complex simulation workflows, such a system bridges
+experimental observations with predictive, simulation-driven insights. This approach not only
+reduces the expertise and time required to perform high-quality simulations but also enables routine,
+reproducible characterization of porous materials, accelerating materials discovery and guiding
+experiments with a level of efficiency and reliability that would be difficult to achieve manually.
+As a step toward this vision, we present two key agent-based components that form the foundation of
+the system. First, experiment setup agents that can automatically generate RASPA [12] input files for
+increasingly complex characterization tasks, including adsorption isotherms, heats of adsorption, and
+multi-adsorbate or multi-structure scenarios. Second, force field retrieval agents that autonomously
+extract relevant parameters from the literature and convert them into a format ready for RASPA
+simulations. We evaluate the correctness and reliability of these components and discuss how they
+provide a scalable framework for fully automated characterization workflows in porous materials.
+2
+Methods
+Our system is organized into two specialized teams of LLM-based agents, using the ReAct framework
+[38], that collaboratively perform autonomous materials characterization. The experiment setup team
+(Figure 2) is coordinated by a supervisor agent that processes user or experimental requests and sets
+up the corresponding simulations. The supervisor delegates responsibilities to specialized agents:
+a structure agent identifies and prepares relevant structure copies, a force field agent combines and
+formats appropriate force field files, a simulation input agent generates templated RASPA input files,
+and a code generation agent [34] automates file operations and template creation. After each agent
+completes its task, an evaluator agent [40] inspects the generated outputs and provides feedback to
+ensure correctness and consistency. Agents have access to general tools for file manipulation, while
+relevant agents also use functions to extract information from files without opening them directly.
+2
+In addition, they share a global memory, which each agent can update with structured reports of
+task execution and outputs. Furthermore, agents have access to example input files from the RASPA
+manual, as well as a library containing multiple force fields to base their simulations on.
+Experiment Setup Team
+Supervisor
+Structure
+Expert
+Force Field
+Expert
+Simulation
+Input
+Expert
+Coding
+Expert
+Evaluator
+      File tools
+Force field 
+tools
+      Plan
+Figure 2: Experiment Setup Team overview.
+The paper research team (Figure 3) extracts simulation-relevant knowledge from the literature. A
+paper search agent retrieves relevant publications, which are passed to an extraction agent that
+reads the papers and summarizes key findings related to force field parameters. A force field writer
+agent then converts these findings into simulation-ready force field files, and has access to dummy
+force field files to base the force fields on. Agents communicate iteratively, requesting additional
+information when needed (e.g., if a force field extends results from a different publication), ensuring
+accuracy and completeness of the extracted knowledge.
+Research Team
+Paper
+Search
+Expert
+Paper
+Extraction
+Expert
+Force 
+Field 
+Writer
+Semantic 
+Search
+Download 
+Paper
+File Tools
+Findings
+ DB
+Force
+Field DB
+Paper DB
+Figure 3: Research Team overview.
+The agentic framework is implemented using LangChain and LangGraph. The paper search agent
+uses Semantic Scholar [1] for queries. The code for the experiments can be found in this repository,
+while more details on the agentic system can be found in Appendix A.
+3
+Experiments
+To evaluate our simulation setup system, we designed a series of zeolite adsorption tasks with
+increasing complexity. These include adsorption isotherms and heats of adsorption (HOA) for single
+(CH4) and multiple adsorbates (CH4, CO2, CO), as well as simulations spanning single and multiple
+zeolite structures. Each task is deliberately constructed so that agents must integrate input parameters
+from multiple sources, combining adsorbate properties and force field parameters from separate files,
+requiring correct assembly and templating. The system has access to several commonly used force
+fields for molecules in zeolites [5, 18, 24, 28], which agents retrieve or combine as needed. Each
+simulation setup is performed five times, and the resulting files are evaluated both manually and by
+executing them in RASPA to verify correctness and reproducibility.
+3
+To evaluate the paper research team, we select a set of publications and process each five times
+to assess reproducibility. The agents extract force field parameters from the papers, and we verify
+whether all relevant parameters are correctly identified and formatted for use in simulations.
+Table 1: Experiment Setup Team results. For
+each task, the number of zeolite structures
+and adsorbates, as well as the success and
+execution rates, are shown.
+Task
+Str.
+Ads.
+Succ.
+Exec.
+Isotherm
+1
+1
+100%
+100%
+3
+100%
+100%
+HOA
+500
+1
+80%
+100%
+3
+80%
+80%
+Isotherm
+500
+1
+100%
+100%
+3
+80%
+100%
+Table 2: Research Team results. For each force field,
+the average number of missed parameters, wrong
+parameters, and the Intersection over Union (IoU)
+between extracted and correct parameters are shown.
+Force fields
+Missed
+Wrong
+IoU
+CO2 [18]
+0
+0
+1.00
+TraPPE-zeo [2]
+0
+0.6
+0.90
+CO2 N2 O2 Ar [33]
+0
+1.4
+0.96
+EPM2 (CO2) [19]
+0
+3
+0.67
+CO2 [14]
+0
+1
+0.96
+CxHx CO2 N2 O2 [16]
+0
+0
+1.00
+Overall, the system performed well in the experiment setup task (Table 1), with a high rate of
+successful and executable simulations. We define the success rate as the proportion of simulations
+correctly configured for their intended task, and the execution rate as the proportion that run without
+errors. The few failures we observed came from specific issues: in the isotherm case with three
+adsorbates, the setup incorrectly generated a combined mixture simulation instead of three individual
+simulations; the Widom insertion method was not configured correctly for single-adsorbate HOA; and
+for three adsorbates, the framework file was not copied. We also observed certain decisions, such as
+selecting a non-standard cutoff (24 Å instead of the typical 12 Å) or enforcing minimum unit cells in
+each direction, that were unusual but still led to correct and runnable simulations. Additional details
+on the simulation setups, including deviations and encountered issues, are provided in Appendix B.
+Table 2 shows the performance of the Research Team in extracting force field parameters. Across
+all tested cases, no parameters were entirely missed, indicating high recall. Most errors arose from
+incorrect numerical values being assigned to otherwise correct terms. In the case of TraPPE-zeo, the
+model introduced a non-existent interaction term. For EPM2, all numbers were extracted correctly
+but assigned to the wrong interactions due to the unconventional table layout, which reduced the
+Intersection over Union (IoU) to 0.67. For the other force fields, the IoU remained high (≥0.9),
+showing that the system is generally reliable when parameter tables follow standard formats.
+In addition to the independent experiments, we conducted a coordinated experiment in which the
+two teams were overseen by a supervisor. They were tasked with extracting the force field from [18]
+and setting up an adsorption isotherm simulation for a structure using the extracted force field. The
+system successfully completed this workflow. An overview of the execution is in Appendix C.
+4
+Discussion
+Our results demonstrate that autonomous agents can reliably set up molecular simulations and
+extract force field parameters from the literature, with only a small number of task-specific errors.
+These outcomes suggest that multi-agent systems provide a promising foundation for automated
+characterization of porous materials.
+Looking forward, the most significant opportunity lies in equipping agent-based systems with
+structured, persistent memory representations. At present, knowledge is encoded procedurally in
+prompts and tools, limiting the ability of agents to adapt across tasks or to refine strategies based on
+past experience. Incorporating semantic memory (e.g., domain-specific heuristics that experts apply
+when setting up simulations) and episodic memory could enable more consistent and generalizable
+behavior [20, 31, 40]. This would allow agents to construct increasingly sophisticated workflows
+for materials characterization, bridging experimental observations with predictive modeling in a
+continuous loop. Ultimately, such systems could serve as the foundation for self-driving laboratories
+[32], where simulation and experimentation workflows are autonomously integrated in real time to
+accelerate the discovery of high-performance porous materials.
+4
+References
+[1] Waleed Ammar, Dirk Groeneveld, Chandra Bhagavatula, Iz Beltagy, Miles Crawford, Doug
+Downey, Jason Dunkelberger, Ahmed Elgohary, Sergey Feldman, Vu Ha, et al. Construction of
+the literature graph in semantic scholar. arXiv preprint arXiv:1805.02262, 2018.
+[2] Peng Bai, Michael Tsapatsis, and J Ilja Siepmann. Trappe-zeo: Transferable potentials for phase
+equilibria force field for all-silica zeolites. The Journal of Physical Chemistry C, 117(46):24375–
+24387, 2013.
+[3] Daniil A Boiko, Robert MacKnight, Ben Kline, and Gabe Gomes. Autonomous chemical
+research with large language models. Nature, 624(7992):570–578, 2023.
+[4] Sébastien Bubeck, Varun Chandrasekaran, Ronen Eldan, Johannes Gehrke, Eric Horvitz, Ece
+Kamar, Peter Lee, Yin Tat Lee, Yuanzhi Li, Scott Lundberg, et al. Sparks of artificial general
+intelligence: Early experiments with gpt-4. arXiv preprint arXiv:2303.12712, 2023.
+[5] Sofía Calero, David Dubbeldam, Rajamani Krishna, Berend Smit, Thijs JH Vlugt, Joeri FM
+Denayer, Johan A Martens, and Theo LM Maesen. Understanding the role of sodium during
+adsorption: a force field for alkanes in sodium-exchanged faujasites. Journal of the American
+Chemical Society, 126(36):11377–11386, 2004.
+[6] Pengfei Cao, Tianyi Men, Wencan Liu, Jingwen Zhang, Xuzhao Li, Xixun Lin, Dianbo Sui,
+Yanan Cao, Kang Liu, and Jun Zhao. Large language models for planning: A comprehensive
+and systematic survey. arXiv preprint arXiv:2505.19683, 2025.
+[7] Conor Cleeton, Felipe Lopes De Oliveira, Rodrigo F Neumann, Amir H Farmahini, Binquan
+Luan, Mathias Steiner, and Lev Sarkisov. A process-level perspective of the impact of molecular
+force fields on the computational screening of mofs for carbon capture. Energy & Environmental
+Science, 16(9):3899–3918, 2023.
+[8] Yamil J Colón and Randall Q Snurr. High-throughput computational screening of metal–organic
+frameworks. Chemical Society Reviews, 43(16):5735–5749, 2014.
+[9] Avelino Corma. From microporous to mesoporous molecular sieve materials and their use in
+catalysis. Chemical reviews, 97(6):2373–2420, 1997.
+[10] François-Xavier Coudert. Responsive metal–organic frameworks and framework materials:
+under pressure, taking the heat, in the spotlight, with friends. Chemistry of Materials, 27(6):1905–
+1916, 2015.
+[11] Kourosh Darvish, Marta Skreta, Yuchi Zhao, Naruki Yoshikawa, Sagnik Som, Miroslav Bog-
+danovic, Yang Cao, Han Hao, Haoping Xu, Alán Aspuru-Guzik, et al. Organa: A robotic
+assistant for automated chemistry experimentation and characterization. Matter, 8(2), 2025.
+[12] David Dubbeldam, Sofía Calero, Donald E Ellis, and Randall Q Snurr. Raspa: molecular
+simulation software for adsorption and diffusion in flexible nanoporous materials. Molecular
+Simulation, 42(2):81–101, 2016.
+[13] Tina Düren, Franck Millange, Gérard Férey, Krista S Walton, and Randall Q Snurr. Calculating
+geometric surface areas as a characterization tool for metal- organic frameworks. The Journal
+of Physical Chemistry C, 111(42):15350–15356, 2007.
+[14] Hanjun Fang, Preeti Kamakoti, Peter I Ravikovitch, Matthew Aronson, Charanjit Paur, and
+David S Sholl. First principles derived, transferable force fields for co 2 adsorption in na-
+exchanged cationic zeolites. Physical Chemistry Chemical Physics, 15(31):12882–12894,
+2013.
+[15] Amir H Farmahini, Shreenath Krishnamurthy, Daniel Friedrich, Stefano Brandani, and Lev
+Sarkisov. Performance-based screening of porous materials for carbon capture. Chemical
+Reviews, 121(17):10666–10741, 2021.
+5
+[16] John M Findley, Salah Eddine Boulfelfel, Hanjun Fang, Giovanni Muraro, Peter I Ravikovitch,
+and David S Sholl.
+A transferable force field for predicting adsorption and diffusion of
+hydrocarbons and small molecules in silica zeolites with coupled-cluster accuracy. The Journal
+of Physical Chemistry C, 125(15):8418–8429, 2021.
+[17] Hiroyasu Furukawa, Kyle E Cordova, Michael O’Keeffe, and Omar M Yaghi. The chemistry
+and applications of metal-organic frameworks. Science, 341(6149):1230444, 2013.
+[18] Almudena Garcia-Sanchez, Conchi O Ania, José B Parra, David Dubbeldam, Thijs JH Vlugt,
+Rajamani Krishna, and Sofia Calero. Transferable force field for carbon dioxide adsorption in
+zeolites. The Journal of Physical Chemistry C, 113(20):8814–8820, 2009.
+[19] Jonathan G Harris and Kwong H Yung. Carbon dioxide’s liquid-vapor coexistence curve and
+critical properties as predicted by a simple molecular model. The Journal of Physical Chemistry,
+99(31):12021–12024, 1995.
+[20] Xu Huang, Weiwen Liu, Xiaolong Chen, Xingmei Wang, Hao Wang, Defu Lian, Yasheng Wang,
+Ruiming Tang, and Enhong Chen. Understanding the planning of llm agents: A survey. arXiv
+preprint arXiv:2402.02716, 2024.
+[21] Jian-Rong Li, Ryan J Kuppler, and Hong-Cai Zhou. Selective gas adsorption and separation in
+metal–organic frameworks. Chemical Society Reviews, 38(5):1477–1504, 2009.
+[22] Ziming Luo, Zonglin Yang, Zexin Xu, Wei Yang, and Xinya Du. Llm4sr: A survey on large
+language models for scientific research. arXiv preprint arXiv:2501.04306, 2025.
+[23] Andres M. Bran, Sam Cox, Oliver Schilter, Carlo Baldassari, Andrew D White, and Philippe
+Schwaller. Augmenting large language models with chemistry tools. Nature Machine Intelli-
+gence, 6(5):525–535, 2024.
+[24] Ana Martin-Calvo, JJ Gutiérrez-Sevillano, JB Parra, CO Ania, and Sofia Calero. Transferable
+force fields for adsorption of small gases in zeolites. Physical Chemistry Chemical Physics,
+17(37):24048–24055, 2015.
+[25] Daniele Ongari, Leopold Talirz, and Berend Smit. Too many materials and too many appli-
+cations: an experimental problem waiting for a computational solution. ACS central science,
+6(11):1890–1900, 2020.
+[26] Mayk Caldas Ramos, Christopher J Collison, and Andrew D White. A review of large language
+models and autonomous agents in chemistry. Chemical science, 2025.
+[27] Shuo Ren, Pu Jian, Zhenjiang Ren, Chunlin Leng, Can Xie, and Jiajun Zhang. Towards scientific
+intelligence: A survey of llm-based scientific agents. arXiv preprint arXiv:2503.24047, 2025.
+[28] Pablo Romero-Marimon, Juan Jose Gutierrez-Sevillano, and Sofia Calero. Adsorption of carbon
+dioxide in non-löwenstein zeolites. Chemistry of Materials, 35(13):5222–5231, 2023.
+[29] Yixiang Ruan, Chenyin Lu, Ning Xu, Yuchen He, Yixin Chen, Jian Zhang, Jun Xuan, Jianzhang
+Pan, Qun Fang, Hanyu Gao, et al. An automatic end-to-end chemical synthesis development
+platform powered by large language models. Nature communications, 15(1):10160, 2024.
+[30] Berend Smit and Theo LM Maesen. Molecular simulations of zeolites: adsorption, diffusion,
+and shape selectivity. Chemical reviews, 108(10):4125–4184, 2008.
+[31] Theodore Sumers, Shunyu Yao, Karthik Narasimhan, and Thomas Griffiths. Cognitive architec-
+tures for language agents. Transactions on Machine Learning Research, 2023.
+[32] Gary Tom, Stefan P Schmid, Sterling G Baird, Yang Cao, Kourosh Darvish, Han Hao, Stanley
+Lo, Sergio Pablo-García, Ella M Rajaonson, Marta Skreta, et al. Self-driving laboratories for
+chemistry and materials science. Chemical Reviews, 124(16):9633–9732, 2024.
+[33] Bojan Vuji´c and Alexander P Lyubartsev. Transferable force-field for modelling of co2, n2, o2
+and ar in all silica and na+ exchanged zeolites. Modelling and simulation in Materials science
+and Engineering, 24(4):045002, 2016.
+6
+[34] Xingyao Wang, Yangyi Chen, Lifan Yuan, Yizhe Zhang, Yunzhu Li, Hao Peng, and Heng Ji.
+Executable code actions elicit better llm agents. In Forty-first International Conference on
+Machine Learning, 2024.
+[35] Hui Wei, Zihao Zhang, Shenghua He, Tian Xia, Shijia Pan, and Fei Liu. Plangenllms: A modern
+survey of llm planning capabilities. arXiv preprint arXiv:2502.11221, 2025.
+[36] Christopher E Wilmer, Michael Leaf, Chang Yeon Lee, Omar K Farha, Brad G Hauser, Joseph T
+Hupp, and Randall Q Snurr. Large-scale screening of hypothetical metal–organic frameworks.
+Nature chemistry, 4(2):83–89, 2012.
+[37] Jia Xu, Weilin Du, Xiao Liu, and Xuejun Li. Llm4workflow: An llm-based automated workflow
+model generation tool. In Proceedings of the 39th IEEE/ACM International Conference on
+Automated Software Engineering, pages 2394–2398, 2024.
+[38] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, and Yuan
+Cao. React: Synergizing reasoning and acting in language models. In International Conference
+on Learning Representations (ICLR), 2023.
+[39] Naruki Yoshikawa, Marta Skreta, Kourosh Darvish, Sebastian Arellano-Rubach, Zhi Ji, Lasse
+Bjørn Kristensen, Andrew Zou Li, Yuchi Zhao, Haoping Xu, Artur Kuramshin, et al. Large
+language models for chemistry robotics. Autonomous Robots, 47(8):1057–1086, 2023.
+[40] Mingchen Zhuge, Changsheng Zhao, Dylan Ashley, Wenyi Wang, Dmitrii Khizbullin, Yunyang
+Xiong, Zechun Liu, Ernie Chang, Raghuraman Krishnamoorthi, Yuandong Tian, et al. Agent-
+as-a-judge: Evaluate agents with agents. arXiv preprint arXiv:2410.10934, 2024.
+[41] Yunheng Zou, Austin H Cheng, Abdulrahman Aldossary, Jiaru Bai, Shi Xuan Leong, Jorge Ar-
+turo Campos-Gonzalez-Angulo, Changhyeok Choi, Cher Tian Ser, Gary Tom, Andrew Wang,
+et al. El agente: An autonomous agent for quantum chemistry. Matter, 8(7), 2025.
+7
+A
+System Overview
+In Table S1, a description of each agent, along with the LLM they are based on, can be found.
+Empirically, we found that most models performed significantly better when using gpt-5, compared
+to older models (gpt-4o, gpt-4.1).
+Table S1: Overview of agents used in this work and models
+Agent Name
+Description
+LLM Model
+Supervisor
+Responsible for understanding the user request, and
+developing a plan of actions needed to be performed
+to set up a simulation. Delegates to the various agents
+according to its plan.
+gpt-5
+Structure Expert
+Finds the appropriate (placeholder) structure, and
+places a copy in the simulation folder.
+gpt-5-mini
+Force Field Expert
+Given a request, decides what the appropriate force
+fields are.
+If necessary, it combines them, and
+writes new force field files (e.g., force_field.def,
+pseudo_atoms.def)
+gpt-5
+Simulation Input Expert
+Creates a simulation.input file, depending on the
+requirements of the simulation. Needs to decide which
+keywords are appropriate, and where to fill in numbers
+and to template.
+gpt-5
+Coding Expert
+Writes code to replicate the template folder for each
+necessary run. Needs to understand how the simulation
+template is set up, and which fields need to be filled in
+and how.
+gpt-5
+Evaluator
+Evaluates the task performance of each agent by in-
+specting files created during their execution and flags
+any potential mistakes it finds.
+gpt-5
+Paper Search Agent
+Uses Semantic Scholar search to find appropriate re-
+search papers, and downloads them.
+gpt-5-mini
+Paper Extraction Agent
+Reads downloaded papers and extracts any relevant
+information from them (e.g., molecule definitions, in-
+teraction parameters).
+gpt-5-mini
+Force Field Writer
+Reads the findings produced by the paper extraction
+agent and transforms them into RASPA force field files.
+gpt-5
+An overview of the tools can be found in Table S2. In addition to the tools enumerated here, agents
+have access to various tools for reading, writing, and copying files.
+8
+Table S2: Overview of tools available to various agents.
+Tool Name
+Description
+Paramaters
+list_example_simulation_inputs
+Gives the names and description of ex-
+ample input files from the RASPA man-
+ual
+-
+read_atoms_in_file
+Returns the set of atoms present in
+a framework.cif or molecule.def
+file.
+file path
+count_atom_type_in_cif
+Counts how often a given atom type
+occurs in a CIF file.
+file path, atom type
+get_unit_cell_size
+Returns the lattice parameters of the
+unit cell defined in a CIF file.
+file path
+get_all_force_field_descriptions
+Lists the available force fields and their
+metadata.
+-
+get_atoms_in_ff_file
+Lists the set of atoms for which
+parameters are defined in a force
+field
+file
+(force_field.def,
+force_field_mixing_rules.def,
+pseudo_atoms.def).
+file path
+semantic_scholar_search
+Performs a search query using the Se-
+mantic Scholar.
+query, limit, fields
+download_paper
+Downloads a paper given a DOI in the
+specified folder.
+DOI, paper name
+read_paper_headers
+Lists the section headers of a paper af-
+ter it has been parsed.
+paper name
+read_paper_section
+Returns the content of the specified sec-
+tion (e.g., introduction) of a paper.
+paper name, section
+B
+Run Details
+In Table S3, a more detailed explanation can be found on issues and mistakes during the simulation
+setup process. Overall, most mistakes are minor and could be fixed in a more robust, future version
+of the system.
+9
+Table S3: Notes on simulation setups with mistakes/intricacies
+Task
+Strucutre
+Adsorbate
+Notes
+Isotherm
+1
+3
+In multiple runs, all adsorbate files were copied into each
+simulation folder. Only the correct adsorbate was used in
+simulation.input, resulting in correct simulations.
+HOA
+500
+1
+In one of the runs, all possible moves were defined (with
+0 probability, except widom insertions) for the adsorbate.
+In another run, no moves were specified for the adsorbate,
+resulting in an incorrect simulation where the adsorbate
+doesn’t move.
+HOA
+500
+3
+In one of the runs, the structure CIF files were not copied,
+resulting in failed simulations. In multiple runs, redun-
+dant/unused files were left as part of the force field.
+Isotherm
+500
+1
+In one of the runs, a minimum amount of unit cells was
+enforced, resulting in many structures with more unit cells
+than necessary, resulting in slower simulations.
+Isotherm
+500
+3
+Rather than generating separate simulations for all three
+adsorbates, a mixture isotherm was calculated in one of the
+simulations. While this is a valid simulation, this was not
+requested in the task. In another run, a cutoff of 24 Å was
+selected, resulting in twice as many unit cells.
+C
+Combined System Run
+In Figures S1 and S2, a full trace is provided, to illustrate the systems behavior. For clarity, some
+messages have been summarized or omitted, highlighting the key interactions and decision points
+while omitting routine or repetitive exchanges.
+10
+Research Team
+    User
+Set up and adsorption isotherm simulation for MOR_33, evaluated at 10,
+30, 100, 300, 1000, 3000 and 10,000 Pa. The force field should be taken
+from 'Transferable force field for carbon dioxide adsorption in zeolites' 
+(2009), by Garcia-Sanchez et al.
+    Supervisor
+Find force field parameters for Transferable force field for carbon dioxide
+adsorption in zeolites (2009) by Garcia-Sanchez. Only download and
+extract the parameters of the one requested paper.
+Transfer to: Research Team
+      Paper
+Search Agent Found and downloaded the Transferable force field for carbon dioxide
+adsorption in zeolites paper. Extract the force field parameters.
+Transfer to: Paper Extraction Agent
+      Paper
+   Extr. Agent
+Force field findings written to '.../findings.txt' — contains LJ params,
+charges, CO2 model, cutoff=12 Å (shifted), Ewald, mobile Na+. 
+Transfer to: Force Field Writer
+      Paper
+   Extr. Agent
+I prepared RASPA force field files for CO2 adsorption in MOR_33 using the
+Garcia‑Sanchez (2009) transferable force field, including explicit Na+
+cations.
+Summary: ...
+Transfer to: Supervisor
+    Supervisor
+Set up an adsorption isotherm simulation at 10, 30, 100, 300, 1000, 3000
+and 10,000 Pa for MOR_33, using the force field in the
+GariaSanchez_2009_CO2_zeolites folder. 
+Transfer to: Experiment Setup Team
+Figure S1: First part of the trace of the full system run.
+11
+Experiment Setup Team
+   Experiment
+    Supervisor Place MOR_33 into the template folder.
+Template folder: 'runs/MOR_33_CO2_GS2009_template'
+Structure source: ' cifs/MOR_33.cif'
+Transfer to: Structure Expert
+    Structure
+       Expert
+Action completed.
+Files placed:
+- runs/MOR_33_CO2_GS2009_template/MOR_33.cif (copied from
+cifs/MOR_33.cif)
+Transfer to: Evaluator
+    Force Field
+       Expert
+Placed Garcia-Sanchez 2009 CO2–zeolite FF into
+runs/MOR_33_CO2_GS2009_template:
+- Created: force_field.def, force_field_mixing_rules.def, pseudo_atoms.def
+- Copied/renamed: adsorbate_CO2.def (rigid CO2), cation_Na.def
+Transfer to: Evaluator
+Steps omitted: Evaluator, Supervisor
+Steps omitted: Evaluator, Supervisor
+   Sim. input
+     Expert
+Wrote simulation.input for runs/MOR_33_CO2_GS2009_template.
+Summary:
+Based on MC_muVT_CO2_NaLTA and MC_muVT_CO2_CuBTC
+examples. Minimal GCMC with Ewald, 12 Å ...
+Transfer to: Evaluator
+Steps omitted: Evaluator, Supervisor
+      Code
+     Expert
+- Inspected the template at runs/MOR_33_CO2_GS2009_template and
+verified placeholders in simulation.input.
+- Replicated the template into runs/MOR_33_CO2_GS2009 for pressures:
+10, 30, 100, 300, 1000, 3000, 10000 Pa.  ...
+Transfer to: Evaluator
+Steps omitted: Evaluator
+   Experiment
+    Supervisor Simulation setup summary: ...
+How to run
+- Change into a run folder (e.g., runs/MOR_33_CO2_GS2009/P_1000Pa)
+and run your simulation executable using the provided simulation.input.
+Transfer to: User
+Figure S2: Second part of the trace of the full system run.
+12
