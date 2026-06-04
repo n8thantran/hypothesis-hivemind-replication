@@ -213,7 +213,7 @@ def plot_intra_model(results_task1, results_task2):
                                    ['(a) Recover underlying hypothesis', '(b) Generate novel hypothesis']):
         data_list = [results[m] for m in MODELS]
         
-        bp = ax.boxplot(data_list, labels=display_names, patch_artist=True,
+        bp = ax.boxplot(data_list, tick_labels=display_names, patch_artist=True,
                        medianprops=dict(color='black', linewidth=2))
         
         # Color by provider
