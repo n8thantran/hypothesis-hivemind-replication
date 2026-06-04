@@ -18,7 +18,6 @@ from typing import Optional
 # Configuration
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
-EMBEDDING_URL = "https://openrouter.ai/api/v1/embeddings"
 
 MODELS = [
     "anthropic/claude-haiku-4.5",
@@ -93,45 +92,61 @@ def truncate_text(text: str, max_chars: int = 80000) -> str:
     return text[:max_chars] + "\n[... truncated ...]"
 
 
+# Semaphore to limit concurrent requests per model
+MODEL_SEMAPHORES = {}
+
 async def call_model(session, model: str, system_prompt: str, user_message: str,
                      temperature: float = 1.0, max_retries: int = 5) -> Optional[str]:
     """Call a model via OpenRouter API with retries."""
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": temperature,
-        "max_tokens": 512,
-    }
+    # Use per-model semaphore to avoid overwhelming any single model
+    if model not in MODEL_SEMAPHORES:
+        MODEL_SEMAPHORES[model] = asyncio.Semaphore(5)
     
-    for attempt in range(max_retries):
-        try:
-            async with session.post(BASE_URL, headers=headers, json=payload, timeout=120) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-                elif resp.status == 429:
-                    wait = min(2 ** attempt * 2, 60)
-                    print(f"    Rate limited ({model}), waiting {wait}s...")
-                    await asyncio.sleep(wait)
-                else:
-                    text = await resp.text()
-                    print(f"    Error {resp.status} for {model}: {text[:200]}")
-                    await asyncio.sleep(2 ** attempt)
-        except asyncio.TimeoutError:
-            print(f"    Timeout for {model}, attempt {attempt+1}")
-            await asyncio.sleep(5)
-        except Exception as e:
-            print(f"    Exception for {model}: {e}")
-            await asyncio.sleep(2 ** attempt)
-    
-    return None
+    async with MODEL_SEMAPHORES[model]:
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "temperature": temperature,
+            "max_tokens": 512,
+        }
+        
+        for attempt in range(max_retries):
+            try:
+                timeout = aiohttp.ClientTimeout(total=180)
+                async with session.post(BASE_URL, headers=headers, json=payload, timeout=timeout) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content")
+                        if content is not None:
+                            return content.strip()
+                        else:
+                            # Some models return content as None with reasoning
+                            print(f"    Null content from {model}, retrying...")
+                            await asyncio.sleep(1)
+                            continue
+                    elif resp.status == 429:
+                        wait = min(2 ** attempt * 3, 60)
+                        print(f"    Rate limited ({model}), waiting {wait}s...")
+                        await asyncio.sleep(wait)
+                    else:
+                        text = await resp.text()
+                        print(f"    Error {resp.status} for {model}: {text[:200]}")
+                        await asyncio.sleep(2 ** attempt)
+            except asyncio.TimeoutError:
+                print(f"    Timeout for {model}, attempt {attempt+1}")
+                await asyncio.sleep(5)
+            except Exception as e:
+                print(f"    Exception for {model}: {e}")
+                await asyncio.sleep(2 ** attempt)
+        
+        return None
 
 
 async def generate_summaries(paper_texts: dict) -> dict:
@@ -142,7 +157,6 @@ async def generate_summaries(paper_texts: dict) -> dict:
         return json.loads(output_file.read_text())
     
     summaries = {}
-    # Use a capable model for summaries
     model = "anthropic/claude-sonnet-4.5"
     
     async with aiohttp.ClientSession() as session:
@@ -155,128 +169,100 @@ async def generate_summaries(paper_texts: dict) -> dict:
                 print(f"    Got summary ({len(result)} chars)")
             else:
                 print(f"    FAILED to get summary")
-            await asyncio.sleep(0.5)  # Rate limiting
+            await asyncio.sleep(0.5)
     
     output_file.write_text(json.dumps(summaries, indent=2))
     print(f"Saved {len(summaries)} summaries")
     return summaries
 
 
-async def generate_task1_hypotheses(summaries: dict) -> dict:
-    """Task 1: Generate underlying hypotheses from experiment summaries."""
-    output_file = OUTPUT_DIR / "task1_hypotheses.json"
+async def generate_hypotheses_for_paper_model(
+    session, paper_id: str, model: str, model_short: str,
+    system_prompt: str, user_message: str, num_samples: int = 10
+) -> list:
+    """Generate multiple hypothesis samples for one paper-model pair."""
+    tasks = []
+    for _ in range(num_samples):
+        tasks.append(call_model(session, model, system_prompt, user_message, temperature=1.0))
+    
+    results = await asyncio.gather(*tasks)
+    return [r for r in results if r is not None]
+
+
+async def generate_task_hypotheses(input_texts: dict, task_name: str,
+                                    system_prompt: str, user_instruction: str,
+                                    max_text_chars: int = 60000) -> dict:
+    """Generic function to generate hypotheses for a task."""
+    output_file = OUTPUT_DIR / f"{task_name}_hypotheses.json"
+    
     if output_file.exists():
-        existing = json.loads(output_file.read_text())
-        # Check if complete
-        total_expected = len(summaries) * len(MODELS) * NUM_SAMPLES
-        total_existing = sum(
-            len(samples)
-            for paper_data in existing.values()
-            for samples in paper_data.values()
-        )
-        if total_existing >= total_expected * 0.95:
-            print(f"Task 1 already complete ({total_existing}/{total_expected} samples)")
-            return existing
-        print(f"Resuming Task 1 ({total_existing}/{total_expected} samples)...")
-        results = existing
+        results = json.loads(output_file.read_text())
     else:
         results = {}
     
-    async with aiohttp.ClientSession() as session:
-        for i, (paper_id, summary) in enumerate(sorted(summaries.items())):
+    # Count existing
+    total_expected = len(input_texts) * len(MODELS) * NUM_SAMPLES
+    total_existing = sum(
+        len(samples)
+        for paper_data in results.values()
+        for samples in paper_data.values()
+    )
+    
+    if total_existing >= total_expected * 0.95:
+        print(f"{task_name} already complete ({total_existing}/{total_expected} samples)")
+        return results
+    
+    print(f"Resuming {task_name} ({total_existing}/{total_expected} samples)...")
+    
+    connector = aiohttp.TCPConnector(limit=30)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        for i, (paper_id, text) in enumerate(sorted(input_texts.items())):
             if paper_id not in results:
                 results[paper_id] = {}
+            
+            truncated_text = truncate_text(text, max_text_chars)
+            user_msg = truncated_text + "\n\n" + user_instruction
+            
+            # Process all models for this paper concurrently
+            model_tasks = []
+            models_to_process = []
             
             for model in MODELS:
                 model_short = MODEL_SHORT_NAMES[model]
                 if model_short in results[paper_id] and len(results[paper_id][model_short]) >= NUM_SAMPLES:
                     continue
-                
-                print(f"  [{i+1}/{len(summaries)}] {paper_id} / {model_short}...")
-                results[paper_id][model_short] = []
-                
-                user_msg = summary + "\n\n" + UNDERLYING_USER_INSTRUCTION
-                
-                # Generate samples with some concurrency
-                tasks = []
-                for s in range(NUM_SAMPLES):
-                    tasks.append(call_model(session, model, UNDERLYING_SYSTEM_PROMPT, user_msg, temperature=1.0))
-                    await asyncio.sleep(0.2)  # Stagger requests
-                
-                responses = await asyncio.gather(*tasks)
-                for resp in responses:
-                    if resp:
-                        results[paper_id][model_short].append(resp)
-                
-                got = len(results[paper_id][model_short])
-                print(f"    Got {got}/{NUM_SAMPLES} samples")
-                
-                # Save periodically
-                output_file.write_text(json.dumps(results, indent=2))
-                await asyncio.sleep(0.3)
+                models_to_process.append((model, model_short))
+                model_tasks.append(
+                    generate_hypotheses_for_paper_model(
+                        session, paper_id, model, model_short,
+                        system_prompt, user_msg, NUM_SAMPLES
+                    )
+                )
+            
+            if not model_tasks:
+                continue
+            
+            print(f"  [{i+1}/{len(input_texts)}] {paper_id} ({len(models_to_process)} models)...")
+            
+            model_results = await asyncio.gather(*model_tasks)
+            
+            for (model, model_short), samples in zip(models_to_process, model_results):
+                results[paper_id][model_short] = samples
+                print(f"    {model_short}: {len(samples)}/{NUM_SAMPLES}")
+            
+            # Save after each paper
+            output_file.write_text(json.dumps(results, indent=2))
+            
+            # Brief pause between papers
+            await asyncio.sleep(0.5)
     
     output_file.write_text(json.dumps(results, indent=2))
-    return results
-
-
-async def generate_task2_hypotheses(paper_texts: dict) -> dict:
-    """Task 2: Generate novel hypotheses from full paper text."""
-    output_file = OUTPUT_DIR / "task2_hypotheses.json"
-    if output_file.exists():
-        existing = json.loads(output_file.read_text())
-        total_expected = len(paper_texts) * len(MODELS) * NUM_SAMPLES
-        total_existing = sum(
-            len(samples)
-            for paper_data in existing.values()
-            for samples in paper_data.values()
-        )
-        if total_existing >= total_expected * 0.95:
-            print(f"Task 2 already complete ({total_existing}/{total_expected} samples)")
-            return existing
-        print(f"Resuming Task 2 ({total_existing}/{total_expected} samples)...")
-        results = existing
-    else:
-        results = {}
-    
-    async with aiohttp.ClientSession() as session:
-        for i, (paper_id, text) in enumerate(sorted(paper_texts.items())):
-            if paper_id not in results:
-                results[paper_id] = {}
-            
-            truncated_text = truncate_text(text, 60000)
-            
-            for model in MODELS:
-                model_short = MODEL_SHORT_NAMES[model]
-                if model_short in results[paper_id] and len(results[paper_id][model_short]) >= NUM_SAMPLES:
-                    continue
-                
-                print(f"  [{i+1}/{len(paper_texts)}] {paper_id} / {model_short}...")
-                results[paper_id][model_short] = []
-                
-                user_msg = truncated_text + "\n\n" + NOVEL_USER_INSTRUCTION
-                
-                tasks = []
-                for s in range(NUM_SAMPLES):
-                    tasks.append(call_model(session, model, NOVEL_SYSTEM_PROMPT, user_msg, temperature=1.0))
-                    await asyncio.sleep(0.2)
-                
-                responses = await asyncio.gather(*tasks)
-                for resp in responses:
-                    if resp:
-                        results[paper_id][model_short].append(resp)
-                
-                got = len(results[paper_id][model_short])
-                print(f"    Got {got}/{NUM_SAMPLES} samples")
-                
-                output_file.write_text(json.dumps(results, indent=2))
-                await asyncio.sleep(0.3)
-    
-    output_file.write_text(json.dumps(results, indent=2))
+    total_final = sum(len(s) for p in results.values() for s in p.values())
+    print(f"{task_name} complete: {total_final} total samples")
     return results
 
 
 async def main():
-    # Load paper texts
     paper_texts = json.loads((DATA_DIR / "paper_texts.json").read_text())
     print(f"Loaded {len(paper_texts)} paper texts")
     
@@ -294,15 +280,19 @@ async def main():
         else:
             print("ERROR: Need summaries first. Run with 'summaries' argument.")
             return
-        task1_results = await generate_task1_hypotheses(summaries)
-        total = sum(len(s) for p in task1_results.values() for s in p.values())
-        print(f"Task 1 total samples: {total}")
+        await generate_task_hypotheses(
+            summaries, "task1",
+            UNDERLYING_SYSTEM_PROMPT, UNDERLYING_USER_INSTRUCTION,
+            max_text_chars=60000
+        )
     
     if task in ("task2", "all"):
         print("\n=== Task 2: Generating novel hypotheses ===")
-        task2_results = await generate_task2_hypotheses(paper_texts)
-        total = sum(len(s) for p in task2_results.values() for s in p.values())
-        print(f"Task 2 total samples: {total}")
+        await generate_task_hypotheses(
+            paper_texts, "task2",
+            NOVEL_SYSTEM_PROMPT, NOVEL_USER_INSTRUCTION,
+            max_text_chars=60000
+        )
 
 
 if __name__ == "__main__":
