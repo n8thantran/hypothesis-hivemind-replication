@@ -14,7 +14,7 @@ from config import (
 from api_utils import call_llm, get_embeddings
 
 MAX_PAPER_TEXT = 80000
-MAX_WORKERS = 8  # concurrent API calls
+NUM_WORKERS = 10
 
 
 def load_paper_texts():
@@ -86,20 +86,15 @@ class ThreadSafeCache:
 
 
 def generate_single_hypothesis(args_tuple):
-    """Generate a single hypothesis (worker function for thread pool)."""
+    """Generate a single hypothesis (worker function)."""
     model_name, model_id, paper_id, sample_idx, system_msg, user_msg = args_tuple
-    
-    response = call_llm(
-        model_id, system_msg, user_msg,
-        max_tokens=2000, temperature=1.0,
-    )
+    response = call_llm(model_id, system_msg, user_msg, max_tokens=2000, temperature=1.0)
     return (model_name, paper_id, sample_idx, response)
 
 
 def run_task(papers, summaries, task, cache_file, num_samples=NUM_SAMPLES):
     """Run hypothesis generation for a task with parallel API calls."""
     cache = ThreadSafeCache(cache_file)
-    
     paper_ids = sorted(papers.keys())
     
     # Build work items
@@ -110,7 +105,6 @@ def run_task(papers, summaries, task, cache_file, num_samples=NUM_SAMPLES):
             cache_key = f"{model_name}|{paper_id}"
             existing = cache.get(cache_key, [])
             needed = num_samples - len(existing)
-            
             if needed <= 0:
                 continue
             
@@ -128,15 +122,16 @@ def run_task(papers, summaries, task, cache_file, num_samples=NUM_SAMPLES):
                 work_items.append((model_name, model_id, paper_id, sample_idx, system_msg, user_msg))
     
     print(f"Total work items: {len(work_items)}")
-    
     if not work_items:
         print("Nothing to do!")
+        cache.save()
         return cache
     
     completed = 0
     failed = 0
+    start_time = time.time()
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
         futures = {executor.submit(generate_single_hypothesis, item): item for item in work_items}
         
         for future in concurrent.futures.as_completed(futures):
@@ -150,8 +145,13 @@ def run_task(papers, summaries, task, cache_file, num_samples=NUM_SAMPLES):
                 else:
                     failed += 1
                 
-                if (completed + failed) % 50 == 0:
-                    print(f"  Progress: {completed} completed, {failed} failed / {len(work_items)} total")
+                total = completed + failed
+                if total % 100 == 0:
+                    elapsed = time.time() - start_time
+                    rate = total / elapsed if elapsed > 0 else 0
+                    eta = (len(work_items) - total) / rate if rate > 0 else 0
+                    print(f"  Progress: {completed}/{len(work_items)} done, {failed} failed, "
+                          f"{rate:.1f}/s, ETA {eta/60:.1f}min")
                     cache.save()
                     
             except Exception as e:
@@ -159,7 +159,8 @@ def run_task(papers, summaries, task, cache_file, num_samples=NUM_SAMPLES):
                 print(f"  Error: {e}")
     
     cache.save()
-    print(f"Finished: {completed} completed, {failed} failed")
+    elapsed = time.time() - start_time
+    print(f"Finished: {completed} completed, {failed} failed in {elapsed/60:.1f}min")
     return cache
 
 
@@ -170,7 +171,6 @@ def run_embeddings(hypotheses_cache_file, embeddings_cache_file):
     
     cache = ThreadSafeCache(embeddings_cache_file)
     
-    # Collect texts needing embedding
     texts_to_embed = []
     text_keys = []
     for cache_key, hypotheses in hyp_data.items():
@@ -182,7 +182,6 @@ def run_embeddings(hypotheses_cache_file, embeddings_cache_file):
     
     print(f"Need to embed {len(texts_to_embed)} texts ({len(cache)} already cached)")
     
-    # Batch embedding
     batch_size = 100
     for start in range(0, len(texts_to_embed), batch_size):
         batch_texts = texts_to_embed[start:start + batch_size]
@@ -193,7 +192,6 @@ def run_embeddings(hypotheses_cache_file, embeddings_cache_file):
             for key, emb in zip(batch_keys, embeddings):
                 cache.set(key, emb)
         else:
-            # Try smaller batches
             for i in range(0, len(batch_texts), 10):
                 sub_texts = batch_texts[i:i+10]
                 sub_keys = batch_keys[i:i+10]
@@ -203,8 +201,9 @@ def run_embeddings(hypotheses_cache_file, embeddings_cache_file):
                         cache.set(key, emb)
                 time.sleep(0.5)
         
-        if (start // batch_size) % 5 == 0:
-            print(f"  Embedded {start + len(batch_texts)}/{len(texts_to_embed)}")
+        done = start + len(batch_texts)
+        if done % 500 == 0 or done == len(texts_to_embed):
+            print(f"  Embedded {done}/{len(texts_to_embed)}")
         
         time.sleep(0.2)
     
@@ -215,17 +214,12 @@ def run_embeddings(hypotheses_cache_file, embeddings_cache_file):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--step", choices=["summaries", "task1", "task2", "embed_task1", "embed_task2", "all"],
+    parser.add_argument("--step", choices=["task1", "task2", "embed_task1", "embed_task2", "all"],
                        default="all")
     parser.add_argument("--num-samples", type=int, default=NUM_SAMPLES)
-    parser.add_argument("--workers", type=int, default=MAX_WORKERS)
     args = parser.parse_args()
     
-    global MAX_WORKERS
-    MAX_WORKERS = args.workers
-    
     os.makedirs(CACHE_DIR, exist_ok=True)
-    
     papers = load_paper_texts()
     print(f"Loaded {len(papers)} papers")
     
@@ -234,11 +228,6 @@ def main():
     task2_file = os.path.join(CACHE_DIR, "task2_hypotheses.json")
     task1_emb_file = os.path.join(CACHE_DIR, "task1_embeddings.json")
     task2_emb_file = os.path.join(CACHE_DIR, "task2_embeddings.json")
-    
-    if args.step in ("summaries", "all"):
-        print("\n=== Generating summaries ===")
-        from run_experiment import generate_experiment_summaries
-        summaries = generate_experiment_summaries(papers, summary_file)
     
     if args.step in ("task1", "all"):
         print("\n=== Task 1: Hypothesis recovery ===")
