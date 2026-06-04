@@ -208,7 +208,7 @@ async def generate_task_hypotheses(input_texts: dict, task_name: str,
         for samples in paper_data.values()
     )
     
-    if total_existing >= total_expected * 0.95:
+    if total_existing >= total_expected * 0.99:
         print(f"{task_name} already complete ({total_existing}/{total_expected} samples)")
         return results
     
