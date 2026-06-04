@@ -114,7 +114,7 @@ async def call_model(session, model: str, system_prompt: str, user_message: str,
                 {"role": "user", "content": user_message},
             ],
             "temperature": temperature,
-            "max_tokens": 512,
+            "max_tokens": 16000,
         }
         
         for attempt in range(max_retries):
