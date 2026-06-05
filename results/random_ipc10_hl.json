@@ -1,0 +1,9 @@
+{
+  "method": "random",
+  "ipc": 10,
+  "hl_mean": 18.61,
+  "hl_std": 0.0,
+  "hl_accs": [
+    18.61
+  ]
+}
