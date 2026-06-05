@@ -1,0 +1,192 @@
+{
+  "P1": {
+    "subject_id": "P1",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 49.0,
+    "start_date": "2024-01-12",
+    "end_date": "2024-02-29",
+    "total_readings": 15431.0,
+    "TIR": 80.05
+  },
+  "P2": {
+    "subject_id": "P2",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 48.0,
+    "start_date": "2024-02-02",
+    "end_date": "2024-03-20",
+    "total_readings": 13197.0,
+    "TIR": 83.66
+  },
+  "P3": {
+    "subject_id": "P3",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 47.0,
+    "start_date": "2024-02-01",
+    "end_date": "2024-03-18",
+    "total_readings": 12734.0,
+    "TIR": 70.35
+  },
+  "P4": {
+    "subject_id": "P4",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 47.0,
+    "start_date": "2024-02-01",
+    "end_date": "2024-03-18",
+    "total_readings": 12964.0,
+    "TIR": 90.55
+  },
+  "P5": {
+    "subject_id": "P5",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 47.0,
+    "start_date": "2023-12-16",
+    "end_date": "2024-01-31",
+    "total_readings": 12676.0,
+    "TIR": 85.86
+  },
+  "P6": {
+    "subject_id": "P6",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 46.0,
+    "start_date": "2024-02-01",
+    "end_date": "2024-03-17",
+    "total_readings": 12955.0,
+    "TIR": 90.04
+  },
+  "P7": {
+    "subject_id": "P7",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 46.0,
+    "start_date": "2023-12-12",
+    "end_date": "2024-01-26",
+    "total_readings": 12814.0,
+    "TIR": 81.89
+  },
+  "P8": {
+    "subject_id": "P8",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 45.0,
+    "start_date": "2024-01-13",
+    "end_date": "2024-02-26",
+    "total_readings": 12630.0,
+    "TIR": 92.78
+  },
+  "P9": {
+    "subject_id": "P9",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 45.0,
+    "start_date": "2023-12-09",
+    "end_date": "2024-01-22",
+    "total_readings": 12710.0,
+    "TIR": 85.21
+  },
+  "P10": {
+    "subject_id": "P10",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 45.0,
+    "start_date": "2024-01-08",
+    "end_date": "2024-02-21",
+    "total_readings": 12267.0,
+    "TIR": 66.34
+  },
+  "P11": {
+    "subject_id": "P11",
+    "dataset": "AZT1D",
+    "sampling_rate": 5.0,
+    "num_days": 45.0,
+    "start_date": "2023-12-08",
+    "end_date": "2024-01-21",
+    "total_readings": 12308.0,
+    "TIR": 64.14
+  },
+  "P12": {
+    "subject_id": "P12",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 41.0,
+    "start_date": "2021-06-21",
+    "end_date": "2021-09-06",
+    "total_readings": 3724.0,
+    "TIR": 42.14
+  },
+  "P13": {
+    "subject_id": "P13",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 30.0,
+    "start_date": "2020-12-24",
+    "end_date": "2021-03-31",
+    "total_readings": 2672.0,
+    "TIR": 99.4
+  },
+  "P14": {
+    "subject_id": "P14",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 30.0,
+    "start_date": "2020-11-18",
+    "end_date": "2021-01-18",
+    "total_readings": 2674.0,
+    "TIR": 85.66
+  },
+  "P15": {
+    "subject_id": "P15",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 30.0,
+    "start_date": "2021-02-03",
+    "end_date": "2021-03-05",
+    "total_readings": 2657.0,
+    "TIR": 58.17
+  },
+  "P16": {
+    "subject_id": "P16",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 29.0,
+    "start_date": "2021-08-03",
+    "end_date": "2021-08-31",
+    "total_readings": 2672.0,
+    "TIR": 94.2
+  },
+  "P17": {
+    "subject_id": "P17",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 28.0,
+    "start_date": "2020-11-02",
+    "end_date": "2020-12-01",
+    "total_readings": 2534.0,
+    "TIR": 86.63
+  },
+  "P18": {
+    "subject_id": "P18",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 27.0,
+    "start_date": "2020-12-07",
+    "end_date": "2021-06-04",
+    "total_readings": 2384.0,
+    "TIR": 91.17
+  },
+  "P19": {
+    "subject_id": "P19",
+    "dataset": "ShanghaiT2DM",
+    "sampling_rate": 15.0,
+    "num_days": 24.0,
+    "start_date": "2021-07-07",
+    "end_date": "2021-07-30",
+    "total_readings": 2123.0,
+    "TIR": 93.6
+  }
+}
