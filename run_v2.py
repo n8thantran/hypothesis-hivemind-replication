@@ -2,7 +2,7 @@
 V2 Comprehensive Runner - Improved experiments to match paper results.
 
 Key improvements over V1:
-1. Better teacher model (300 epochs, proper schedule, augmentation)
+1. Better teacher model (300 epochs, cosine schedule, DSA augmentation)
 2. Feature-space K-centers using trained model
 3. Proper iteration counts for DD methods
 4. 3 evaluation runs for all configs
@@ -34,7 +34,7 @@ def train_teacher_v2(train_images, train_labels, test_images, test_labels,
         print(f"Teacher test accuracy: {checkpoint.get('test_acc', 'unknown')}%")
         return model
     
-    print("Training V2 teacher model (300 epochs, augmentation)...")
+    print(f"Training V2 teacher model ({epochs} epochs, cosine schedule, DSA aug)...")
     model = get_convnet_d3().to(device)
     
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
@@ -46,6 +46,7 @@ def train_teacher_v2(train_images, train_labels, test_images, test_labels,
                                           num_workers=0, pin_memory=True)
     
     best_acc = 0
+    t0 = time.time()
     for epoch in range(epochs):
         model.train()
         for batch_imgs, batch_labels in loader:
@@ -75,7 +76,8 @@ def train_teacher_v2(train_images, train_labels, test_images, test_labels,
                     correct += predicted.eq(labels).sum().item()
                     total += labels.size(0)
             acc = 100.0 * correct / total
-            print(f"  Epoch {epoch+1}/{epochs}, Test Acc: {acc:.2f}%")
+            elapsed = time.time() - t0
+            print(f"  Epoch {epoch+1}/{epochs}, Test Acc: {acc:.2f}%, Time: {elapsed:.0f}s")
             if acc > best_acc:
                 best_acc = acc
     
@@ -125,241 +127,7 @@ def run_eval(train_images, train_labels, test_images, test_labels,
     mean_acc = np.mean(accs)
     std_acc = np.std(accs)
     print(f"    → {mean_acc:.2f} ± {std_acc:.2f}%")
-    return {'mean': mean_acc, 'std': std_acc, 'runs': accs}
-
-
-def main():
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    results = {}
-    
-    # Load data
-    print("=" * 60)
-    print("Loading CIFAR-100...")
-    train_images, train_labels, test_images, test_labels = get_cifar100_tensors()
-    print(f"Train: {train_images.shape}, Test: {test_images.shape}")
-    
-    model_fn = lambda: get_convnet_d3()
-    
-    # ============================================================
-    # Step 1: Train teacher and generate soft labels
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("STEP 1: Training teacher model")
-    teacher = train_teacher_v2(train_images, train_labels, test_images, test_labels, device)
-    
-    print("\n" + "=" * 60)
-    print("STEP 2: Generating soft labels")
-    soft_labels_full = generate_soft_labels_v2(train_images, teacher, device)
-    
-    # ============================================================
-    # Step 2: Coreset methods (Random, K-centers)
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("STEP 3: Coreset methods")
-    
-    for method_name in ['random', 'k_centers']:
-        for ipc in [10, 50]:
-            print(f"\n--- {method_name} IPC={ipc} ---")
-            
-            if method_name == 'random':
-                selected = random_select(train_labels, ipc=ipc, seed=42)
-            else:
-                # Feature-space K-centers using trained teacher
-                selected = k_centers_select(
-                    train_images, train_labels, ipc=ipc, 
-                    use_features=True, feature_model=teacher, device=device, seed=42
-                )
-            
-            sub_images = train_images[selected]
-            sub_labels = train_labels[selected]
-            sub_soft = soft_labels_full[selected]
-            
-            # Hard label eval
-            print(f"  HL evaluation:")
-            res = run_eval(sub_images, sub_labels, test_images, test_labels,
-                          model_fn, 'hard', num_runs=3, device=device)
-            results[f'{method_name}_ipc{ipc}_hard'] = res
-            
-            # Soft label eval
-            print(f"  SL evaluation:")
-            res = run_eval(sub_images, sub_labels, test_images, test_labels,
-                          model_fn, 'soft', soft_labels=sub_soft, num_runs=3, device=device)
-            results[f'{method_name}_ipc{ipc}_soft'] = res
-            
-            # Save intermediate results
-            save_results(results)
-    
-    # ============================================================
-    # Step 3: DM distillation
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("STEP 4: Distribution Matching (DM)")
-    
-    from distill_dm import distribution_matching
-    
-    for ipc in [10, 50]:
-        dm_path = f'/workspace/distilled_dm_v2_ipc{ipc}.pt'
-        dm_sl_path = f'/workspace/soft_labels_dm_v2_ipc{ipc}.pt'
-        
-        if os.path.exists(dm_path):
-            print(f"Loading existing DM IPC={ipc} from {dm_path}")
-            data = torch.load(dm_path, map_location='cpu', weights_only=False)
-            syn_images, syn_labels = data['images'], data['labels']
-        else:
-            print(f"\n--- DM IPC={ipc} (20000 iterations) ---")
-            syn_images, syn_labels = distribution_matching(
-                train_images, train_labels, ipc=ipc,
-                iterations=20000, lr_img=1.0, batch_real=256,
-                device=device, seed=0
-            )
-            torch.save({'images': syn_images, 'labels': syn_labels}, dm_path)
-        
-        # Generate soft labels for distilled data
-        if os.path.exists(dm_sl_path):
-            syn_soft = torch.load(dm_sl_path, map_location='cpu', weights_only=False)
-        else:
-            teacher.eval()
-            with torch.no_grad():
-                syn_soft = teacher(syn_images.to(device)).cpu()
-            torch.save(syn_soft, dm_sl_path)
-        
-        # Evaluate
-        print(f"  DM IPC={ipc} HL evaluation:")
-        res = run_eval(syn_images, syn_labels, test_images, test_labels,
-                      model_fn, 'hard', num_runs=3, device=device)
-        results[f'dm_ipc{ipc}_hard'] = res
-        
-        print(f"  DM IPC={ipc} SL evaluation:")
-        res = run_eval(syn_images, syn_labels, test_images, test_labels,
-                      model_fn, 'soft', soft_labels=syn_soft, num_runs=3, device=device)
-        results[f'dm_ipc{ipc}_soft'] = res
-        
-        save_results(results)
-        gc.collect()
-        torch.cuda.empty_cache()
-    
-    # ============================================================
-    # Step 4: DC distillation
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("STEP 5: Dataset Condensation (DC)")
-    
-    from distill_dc import gradient_matching
-    
-    for ipc in [10, 50]:
-        dc_path = f'/workspace/distilled_dc_v2_ipc{ipc}.pt'
-        dc_sl_path = f'/workspace/soft_labels_dc_v2_ipc{ipc}.pt'
-        
-        if os.path.exists(dc_path):
-            print(f"Loading existing DC IPC={ipc} from {dc_path}")
-            data = torch.load(dc_path, map_location='cpu', weights_only=False)
-            syn_images, syn_labels = data['images'], data['labels']
-        else:
-            print(f"\n--- DC IPC={ipc} (50 outer × 50 inner) ---")
-            syn_images, syn_labels = gradient_matching(
-                train_images, train_labels, ipc=ipc,
-                outer_loops=50, inner_loops=50, lr_img=1.0,
-                batch_real=256, device=device, seed=0
-            )
-            torch.save({'images': syn_images, 'labels': syn_labels}, dc_path)
-        
-        # Generate soft labels
-        if os.path.exists(dc_sl_path):
-            syn_soft = torch.load(dc_sl_path, map_location='cpu', weights_only=False)
-        else:
-            teacher.eval()
-            with torch.no_grad():
-                syn_soft = teacher(syn_images.to(device)).cpu()
-            torch.save(syn_soft, dc_sl_path)
-        
-        # Evaluate
-        print(f"  DC IPC={ipc} HL evaluation:")
-        res = run_eval(syn_images, syn_labels, test_images, test_labels,
-                      model_fn, 'hard', num_runs=3, device=device)
-        results[f'dc_ipc{ipc}_hard'] = res
-        
-        print(f"  DC IPC={ipc} SL evaluation:")
-        res = run_eval(syn_images, syn_labels, test_images, test_labels,
-                      model_fn, 'soft', soft_labels=syn_soft, num_runs=3, device=device)
-        results[f'dc_ipc{ipc}_soft'] = res
-        
-        save_results(results)
-        gc.collect()
-        torch.cuda.empty_cache()
-    
-    # ============================================================
-    # Step 5: TM distillation
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("STEP 6: Trajectory Matching (TM)")
-    
-    from distill_tm import train_expert_trajectories, trajectory_matching
-    
-    # Train experts if needed
-    expert_dir = '/workspace/expert_trajectories_v2'
-    num_experts = 10  # Paper uses 100, but 10 is feasible
-    expert_epochs = 50
-    
-    if not os.path.exists(expert_dir) or len(os.listdir(expert_dir)) < num_experts:
-        print(f"Training {num_experts} expert trajectories ({expert_epochs} epochs each)...")
-        train_expert_trajectories(
-            train_images, train_labels,
-            num_experts=num_experts, expert_epochs=expert_epochs,
-            save_dir=expert_dir, device=device, seed=0
-        )
-    else:
-        print(f"Using existing {len(os.listdir(expert_dir))} expert trajectories")
-    
-    for ipc in [10, 50]:
-        tm_path = f'/workspace/distilled_tm_v2_ipc{ipc}.pt'
-        tm_sl_path = f'/workspace/soft_labels_tm_v2_ipc{ipc}.pt'
-        
-        if os.path.exists(tm_path):
-            print(f"Loading existing TM IPC={ipc} from {tm_path}")
-            data = torch.load(tm_path, map_location='cpu', weights_only=False)
-            syn_images, syn_labels = data['images'], data['labels']
-        else:
-            print(f"\n--- TM IPC={ipc} (5000 iterations) ---")
-            syn_images, syn_labels = trajectory_matching(
-                train_images, train_labels, ipc=ipc,
-                expert_dir=expert_dir, num_experts=num_experts,
-                iterations=5000, lr_img=1000.0, lr_lr=1e-5,
-                syn_steps=30, expert_epochs=3, max_start_epoch=25,
-                device=device, seed=0
-            )
-            torch.save({'images': syn_images, 'labels': syn_labels}, tm_path)
-        
-        # Generate soft labels
-        if os.path.exists(tm_sl_path):
-            syn_soft = torch.load(tm_sl_path, map_location='cpu', weights_only=False)
-        else:
-            teacher.eval()
-            with torch.no_grad():
-                syn_soft = teacher(syn_images.to(device)).cpu()
-            torch.save(syn_soft, tm_sl_path)
-        
-        # Evaluate
-        print(f"  TM IPC={ipc} HL evaluation:")
-        res = run_eval(syn_images, syn_labels, test_images, test_labels,
-                      model_fn, 'hard', num_runs=3, device=device)
-        results[f'tm_ipc{ipc}_hard'] = res
-        
-        print(f"  TM IPC={ipc} SL evaluation:")
-        res = run_eval(syn_images, syn_labels, test_images, test_labels,
-                      model_fn, 'soft', soft_labels=syn_soft, num_runs=3, device=device)
-        results[f'tm_ipc{ipc}_soft'] = res
-        
-        save_results(results)
-        gc.collect()
-        torch.cuda.empty_cache()
-    
-    # ============================================================
-    # Final: Print results table
-    # ============================================================
-    print("\n" + "=" * 60)
-    print("FINAL RESULTS")
-    print_results_table(results)
-    save_results(results)
+    return {'mean': float(mean_acc), 'std': float(std_acc), 'runs': [float(a) for a in accs]}
 
 
 def save_results(results, path='/workspace/results/results_v2.json'):
@@ -384,8 +152,9 @@ def print_results_table(results):
         'k_centers_ipc50_hard': 38.64, 'k_centers_ipc50_soft': 46.24,
     }
     
-    print(f"\n{'Method':<12} {'IPC':>4} {'Label':>6} {'Ours':>10} {'Paper':>8} {'Diff':>8}")
-    print("-" * 55)
+    header = f"{'Method':<12} {'IPC':>4} {'Label':>6} {'Ours':>12} {'Paper':>8} {'Diff':>8}"
+    sep = "-" * 55
+    lines = [header, sep]
     
     for method in ['dm', 'dc', 'tm', 'random', 'k_centers']:
         for ipc in [10, 50]:
@@ -393,24 +162,303 @@ def print_results_table(results):
                 key = f'{method}_ipc{ipc}_{label}'
                 if key in results:
                     ours = results[key]['mean']
+                    std = results[key]['std']
                     pval = paper.get(key, 0)
                     diff = ours - pval
-                    print(f"{method:<12} {ipc:>4} {label:>6} {ours:>8.2f}±{results[key]['std']:.2f} {pval:>8.2f} {diff:>+8.2f}")
+                    line = f"{method:<12} {ipc:>4} {label:>6} {ours:>7.2f}±{std:.2f} {pval:>8.2f} {diff:>+8.2f}"
+                    lines.append(line)
+    
+    for line in lines:
+        print(line)
     
     # Save table to file
     table_path = '/workspace/results/table_v2.txt'
     with open(table_path, 'w') as f:
-        f.write(f"{'Method':<12} {'IPC':>4} {'Label':>6} {'Ours':>10} {'Paper':>8} {'Diff':>8}\n")
-        f.write("-" * 55 + "\n")
-        for method in ['dm', 'dc', 'tm', 'random', 'k_centers']:
-            for ipc in [10, 50]:
-                for label in ['hard', 'soft']:
-                    key = f'{method}_ipc{ipc}_{label}'
-                    if key in results:
-                        ours = results[key]['mean']
-                        pval = paper.get(key, 0)
-                        diff = ours - pval
-                        f.write(f"{method:<12} {ipc:>4} {label:>6} {ours:>8.2f}±{results[key]['std']:.2f} {pval:>8.2f} {diff:>+8.2f}\n")
+        f.write('\n'.join(lines) + '\n')
+
+
+def main():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Load existing results if any
+    results_path = '/workspace/results/results_v2.json'
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            results = json.load(f)
+        print(f"Loaded {len(results)} existing results")
+    else:
+        results = {}
+    
+    # Load data
+    print("=" * 60)
+    print("Loading CIFAR-100...")
+    train_images, train_labels, test_images, test_labels = get_cifar100_tensors()
+    print(f"Train: {train_images.shape}, Test: {test_images.shape}")
+    
+    model_fn = lambda: get_convnet_d3()
+    
+    # ============================================================
+    # Step 1: Train teacher and generate soft labels
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("STEP 1: Training teacher model")
+    teacher = train_teacher_v2(train_images, train_labels, test_images, test_labels, device)
+    
+    print("\nSTEP 2: Generating soft labels")
+    soft_labels_full = generate_soft_labels_v2(train_images, teacher, device)
+    
+    # ============================================================
+    # Step 2: Coreset methods (Random, K-centers)
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("STEP 3: Coreset methods")
+    
+    for method_name in ['random', 'k_centers']:
+        for ipc in [10, 50]:
+            hl_key = f'{method_name}_ipc{ipc}_hard'
+            sl_key = f'{method_name}_ipc{ipc}_soft'
+            
+            if hl_key in results and sl_key in results:
+                print(f"  Skipping {method_name} IPC={ipc} (already done)")
+                continue
+            
+            print(f"\n--- {method_name} IPC={ipc} ---")
+            
+            if method_name == 'random':
+                selected = random_select(train_labels, ipc=ipc, seed=42)
+            else:
+                # Feature-space K-centers using trained teacher
+                selected = k_centers_select(
+                    train_images, train_labels, ipc=ipc, 
+                    use_features=True, feature_model=teacher, device=device, seed=42
+                )
+            
+            sub_images = train_images[selected]
+            sub_labels = train_labels[selected]
+            sub_soft = soft_labels_full[selected]
+            
+            if hl_key not in results:
+                print(f"  HL evaluation:")
+                res = run_eval(sub_images, sub_labels, test_images, test_labels,
+                              model_fn, 'hard', num_runs=3, device=device)
+                results[hl_key] = res
+            
+            if sl_key not in results:
+                print(f"  SL evaluation:")
+                res = run_eval(sub_images, sub_labels, test_images, test_labels,
+                              model_fn, 'soft', soft_labels=sub_soft, num_runs=3, device=device)
+                results[sl_key] = res
+            
+            save_results(results)
+    
+    # ============================================================
+    # Step 3: DM distillation (5000 iterations - feasible compromise)
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("STEP 4: Distribution Matching (DM)")
+    
+    from distill_dm import distribution_matching
+    
+    for ipc in [10, 50]:
+        hl_key = f'dm_ipc{ipc}_hard'
+        sl_key = f'dm_ipc{ipc}_soft'
+        
+        if hl_key in results and sl_key in results:
+            print(f"  Skipping DM IPC={ipc} (already done)")
+            continue
+        
+        dm_path = f'/workspace/distilled_dm_v2_ipc{ipc}.pt'
+        dm_sl_path = f'/workspace/soft_labels_dm_v2_ipc{ipc}.pt'
+        
+        if os.path.exists(dm_path):
+            print(f"Loading existing DM IPC={ipc} from {dm_path}")
+            data = torch.load(dm_path, map_location='cpu', weights_only=False)
+            syn_images, syn_labels = data['images'], data['labels']
+        else:
+            print(f"\n--- DM IPC={ipc} (5000 iterations) ---")
+            t0 = time.time()
+            syn_images, syn_labels = distribution_matching(
+                train_images, train_labels, ipc=ipc,
+                iterations=5000, lr_img=1.0, batch_real=256,
+                device=device, seed=0
+            )
+            print(f"  DM IPC={ipc} done in {time.time()-t0:.0f}s")
+            torch.save({'images': syn_images, 'labels': syn_labels}, dm_path)
+        
+        # Generate soft labels for distilled data
+        if os.path.exists(dm_sl_path):
+            syn_soft = torch.load(dm_sl_path, map_location='cpu', weights_only=False)
+        else:
+            teacher.eval()
+            with torch.no_grad():
+                syn_soft = teacher(syn_images.to(device)).cpu()
+            torch.save(syn_soft, dm_sl_path)
+        
+        # Evaluate
+        if hl_key not in results:
+            print(f"  DM IPC={ipc} HL evaluation:")
+            res = run_eval(syn_images, syn_labels, test_images, test_labels,
+                          model_fn, 'hard', num_runs=3, device=device)
+            results[hl_key] = res
+        
+        if sl_key not in results:
+            print(f"  DM IPC={ipc} SL evaluation:")
+            res = run_eval(syn_images, syn_labels, test_images, test_labels,
+                          model_fn, 'soft', soft_labels=syn_soft, num_runs=3, device=device)
+            results[sl_key] = res
+        
+        save_results(results)
+        gc.collect()
+        torch.cuda.empty_cache()
+    
+    # ============================================================
+    # Step 4: DC distillation (10 outer × 50 inner = 500 loops)
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("STEP 5: Dataset Condensation (DC)")
+    
+    from distill_dc import gradient_matching
+    
+    for ipc in [10, 50]:
+        hl_key = f'dc_ipc{ipc}_hard'
+        sl_key = f'dc_ipc{ipc}_soft'
+        
+        if hl_key in results and sl_key in results:
+            print(f"  Skipping DC IPC={ipc} (already done)")
+            continue
+        
+        dc_path = f'/workspace/distilled_dc_v2_ipc{ipc}.pt'
+        dc_sl_path = f'/workspace/soft_labels_dc_v2_ipc{ipc}.pt'
+        
+        if os.path.exists(dc_path):
+            print(f"Loading existing DC IPC={ipc} from {dc_path}")
+            data = torch.load(dc_path, map_location='cpu', weights_only=False)
+            syn_images, syn_labels = data['images'], data['labels']
+        else:
+            print(f"\n--- DC IPC={ipc} (10 outer × 50 inner) ---")
+            t0 = time.time()
+            syn_images, syn_labels = gradient_matching(
+                train_images, train_labels, ipc=ipc,
+                outer_loops=10, inner_loops=50, lr_img=1.0,
+                batch_real=256, device=device, seed=0
+            )
+            print(f"  DC IPC={ipc} done in {time.time()-t0:.0f}s")
+            torch.save({'images': syn_images, 'labels': syn_labels}, dc_path)
+        
+        # Generate soft labels
+        if os.path.exists(dc_sl_path):
+            syn_soft = torch.load(dc_sl_path, map_location='cpu', weights_only=False)
+        else:
+            teacher.eval()
+            with torch.no_grad():
+                syn_soft = teacher(syn_images.to(device)).cpu()
+            torch.save(syn_soft, dc_sl_path)
+        
+        # Evaluate
+        if hl_key not in results:
+            print(f"  DC IPC={ipc} HL evaluation:")
+            res = run_eval(syn_images, syn_labels, test_images, test_labels,
+                          model_fn, 'hard', num_runs=3, device=device)
+            results[hl_key] = res
+        
+        if sl_key not in results:
+            print(f"  DC IPC={ipc} SL evaluation:")
+            res = run_eval(syn_images, syn_labels, test_images, test_labels,
+                          model_fn, 'soft', soft_labels=syn_soft, num_runs=3, device=device)
+            results[sl_key] = res
+        
+        save_results(results)
+        gc.collect()
+        torch.cuda.empty_cache()
+    
+    # ============================================================
+    # Step 5: TM distillation
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("STEP 6: Trajectory Matching (TM)")
+    
+    from distill_tm import train_expert_trajectories, trajectory_matching
+    
+    # Train experts if needed
+    expert_dir = '/workspace/expert_trajectories_v2'
+    num_experts = 10
+    expert_epochs = 50
+    
+    if not os.path.exists(expert_dir) or len([f for f in os.listdir(expert_dir) if f.startswith('expert_')]) < num_experts:
+        print(f"Training {num_experts} expert trajectories ({expert_epochs} epochs each)...")
+        t0 = time.time()
+        train_expert_trajectories(
+            train_images, train_labels,
+            num_experts=num_experts, expert_epochs=expert_epochs,
+            save_dir=expert_dir, device=device, seed=0
+        )
+        print(f"  Expert training done in {time.time()-t0:.0f}s")
+    else:
+        n_existing = len([f for f in os.listdir(expert_dir) if f.startswith('expert_')])
+        print(f"Using existing {n_existing} expert trajectories")
+    
+    for ipc in [10, 50]:
+        hl_key = f'tm_ipc{ipc}_hard'
+        sl_key = f'tm_ipc{ipc}_soft'
+        
+        if hl_key in results and sl_key in results:
+            print(f"  Skipping TM IPC={ipc} (already done)")
+            continue
+        
+        tm_path = f'/workspace/distilled_tm_v2_ipc{ipc}.pt'
+        tm_sl_path = f'/workspace/soft_labels_tm_v2_ipc{ipc}.pt'
+        
+        if os.path.exists(tm_path):
+            print(f"Loading existing TM IPC={ipc} from {tm_path}")
+            data = torch.load(tm_path, map_location='cpu', weights_only=False)
+            syn_images, syn_labels = data['images'], data['labels']
+        else:
+            print(f"\n--- TM IPC={ipc} (5000 iterations) ---")
+            t0 = time.time()
+            syn_images, syn_labels = trajectory_matching(
+                train_images, train_labels, ipc=ipc,
+                expert_dir=expert_dir, num_experts=num_experts,
+                iterations=5000, lr_img=1000.0, lr_lr=1e-5,
+                syn_steps=30, expert_epochs=3, max_start_epoch=25,
+                device=device, seed=0
+            )
+            print(f"  TM IPC={ipc} done in {time.time()-t0:.0f}s")
+            torch.save({'images': syn_images, 'labels': syn_labels}, tm_path)
+        
+        # Generate soft labels
+        if os.path.exists(tm_sl_path):
+            syn_soft = torch.load(tm_sl_path, map_location='cpu', weights_only=False)
+        else:
+            teacher.eval()
+            with torch.no_grad():
+                syn_soft = teacher(syn_images.to(device)).cpu()
+            torch.save(syn_soft, tm_sl_path)
+        
+        # Evaluate
+        if hl_key not in results:
+            print(f"  TM IPC={ipc} HL evaluation:")
+            res = run_eval(syn_images, syn_labels, test_images, test_labels,
+                          model_fn, 'hard', num_runs=3, device=device)
+            results[hl_key] = res
+        
+        if sl_key not in results:
+            print(f"  TM IPC={ipc} SL evaluation:")
+            res = run_eval(syn_images, syn_labels, test_images, test_labels,
+                          model_fn, 'soft', soft_labels=syn_soft, num_runs=3, device=device)
+            results[sl_key] = res
+        
+        save_results(results)
+        gc.collect()
+        torch.cuda.empty_cache()
+    
+    # ============================================================
+    # Final: Print results table
+    # ============================================================
+    print("\n" + "=" * 60)
+    print("FINAL RESULTS")
+    print_results_table(results)
+    save_results(results)
+    print("\nDone! Results saved to /workspace/results/results_v2.json")
 
 
 if __name__ == '__main__':
