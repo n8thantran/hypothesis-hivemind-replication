@@ -1,49 +1,35 @@
-# Progress Tracking
+# CGM-Agent Replication Progress
 
-## Current Phase
-COMPLETE - All figures generated, reproduce.sh tested, REPORT.md written. Ready to call end_task.
+## Current Phase: Planning
 
 ## Implementation Plan
-- [x] Set up environment and check available resources
-- [x] Download all 50 papers from OpenReview
-- [x] Verify API access (OpenRouter: all 6 models + text-embedding-3-small confirmed)
-- [x] Extract text from PDFs using PyMuPDF
-- [x] Task 1 Step 1: Generate experiment summaries (1 per paper, using Claude Sonnet 4.5)
-- [x] Task 1 Step 2: Generate underlying hypotheses (10 samples × 6 models × 50 papers = 3000 calls)
-- [x] Task 2: Generate novel hypotheses (10 samples × 6 models × 50 papers = 3000 calls)
-- [x] Compute embeddings using text-embedding-3-small via OpenRouter
-- [x] Compute cosine similarity matrices
-- [x] Generate Figure 1A: Inter-model heatmap for Task 1
-- [x] Generate Figure 1B: Inter-model heatmap for Task 2
-- [x] Generate Figure 2: Intra-model similarity plots (both tasks)
-- [x] Generate Figure 3: KDE distribution plots (both tasks)
-- [x] Create reproduce.sh (tested successfully)
-- [x] Write REPORT.md
-- [x] All files committed and pushed
+- [ ] 1. Download and process CGM data (AZT1D + ShanghaiT2DM datasets)
+- [ ] 2. Implement CGM analytical toolkit (all 12+ functions)
+- [ ] 3. Implement question generation (synthetic templates + user-derived)
+- [ ] 4. Implement 3-layer agent pipeline (Input Processor, Analytical Agent, Response Generator)
+- [ ] 5. Implement evaluation metrics (Precision, Recall, F1, Value Accuracy)
+- [ ] 6. Run experiments and generate result tables
+- [ ] 7. Create reproduce.sh and final report
 
-## Key Results
-- Task 1 inter-model mean off-diagonal: 0.768
-- Task 2 inter-model mean off-diagonal: 0.635
-- Both tasks show high inter-model similarity, confirming paper's "hivemind" finding
-- KDE plots show clear separation between same-paper and different-paper distributions
+## Key Decisions
+- Paper uses 19 subjects: P1-P11 from AZT1D (T1D, 5-min), P12-P19 from ShanghaiT2DM (T2D, 15-min)
+- Subject mapping in Table 10 (Appendix)
+- Toolkit has 3 tiers: Data Processing, Daily Metrics, Long-term Aggregation
+- Evaluation uses ±1% tolerance for value accuracy
+- CGM weartime threshold: ≥70%
+- TIR: 70-180 mg/dL, TBR: <70 mg/dL, TAR: >180 mg/dL
+- Hypo events: <70 mg/dL for 15+ min, Hyper events: >180 mg/dL for 15+ min
+
+## Key Tables to Reproduce
+- Table 3: Synthetic query results (Layer 2)
+- Table 4: Layer 1 feasibility classification  
+- Table 5: Layer 2 real-world query results
+- Table 6: Readability analysis
+- Table 7: Ablation study
+- Table 8: TIR correlation
 
 ## Completed Work
-- `download_papers.py` - Downloads all 50 papers from OpenReview
-- `extract_text.py` - Extracts text from PDFs using PyMuPDF
-- `generate_summaries.py` - Generates experiment summaries (Claude Sonnet 4.5)
-- `generate_hypotheses.py` - Generates hypotheses for both tasks (6 models × 10 samples × 50 papers)
-- `compute_embeddings.py` - Computes embeddings via OpenRouter (text-embedding-3-small)
-- `analyze_and_plot.py` - Generates all 4 figures + metrics
-- `reproduce.sh` - Full pipeline script (tested, runs successfully with cached data)
-- `REPORT.md` - Final report
+(none yet)
 
 ## Failed Approaches
-- Initial generate_hypotheses.py failed because reasoning models (GPT-5 Nano/Mini/5) need high max_tokens for reasoning budget. Fixed by setting max_tokens=16000.
-- Some API calls returned null content; handled by checking for null and retrying.
-
-## Evaluation Coverage
-All quantitative results from the paper's Section 4 and Appendix A are replicated:
-- Figure 1 (A + B): Inter-model similarity heatmaps
-- Figure 2 (A + B): Intra-model similarity comparison  
-- Figure 3 (A + B): Same vs different paper KDE distributions
-- Core claim: Models form a "hivemind" with limited epistemic diversity
+(none yet)
