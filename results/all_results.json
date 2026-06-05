@@ -1,59 +1,11 @@
 {
-  "table4": {
-    "GPT-5.2": {
-      "accuracy": 0.81,
-      "precision": 0.97,
-      "recall": 0.79,
-      "f1": 0.87,
-      "tp": 122,
-      "fp": 4,
-      "tn": 41,
-      "fn": 33,
-      "n_evaluated": 200
-    },
-    "GPT-5-Mini": {
-      "accuracy": 0.85,
-      "precision": 0.98,
-      "recall": 0.82,
-      "f1": 0.89,
-      "tp": 121,
-      "fp": 2,
-      "tn": 50,
-      "fn": 27,
-      "n_evaluated": 200
-    },
-    "Gemini 3.0 Pro": {
-      "accuracy": 0.92,
-      "precision": 0.94,
-      "recall": 0.94,
-      "f1": 0.94,
-      "tp": 132,
-      "fp": 9,
-      "tn": 51,
-      "fn": 8,
-      "n_evaluated": 200
-    },
-    "Gemini 3.0 Flash": {
-      "accuracy": 0.88,
-      "precision": 0.9,
-      "recall": 0.93,
-      "f1": 0.92,
-      "tp": 133,
-      "fp": 14,
-      "tn": 43,
-      "fn": 10,
-      "n_evaluated": 200
-    },
-    "Llama-4-17B": {
-      "accuracy": 0.84,
-      "precision": 0.94,
-      "recall": 0.82,
-      "f1": 0.88,
-      "tp": 112,
-      "fp": 7,
-      "tn": 57,
-      "fn": 24,
-      "n_evaluated": 200
-    }
+  "table6": {
+    "avg_length_words": 80.0,
+    "flesch_reading_ease": 58.1,
+    "flesch_kincaid_grade": 9.1,
+    "n_responses": 200,
+    "std_length": 17.3,
+    "std_flesch": 11.2,
+    "std_fk_grade": 1.9
   }
 }
