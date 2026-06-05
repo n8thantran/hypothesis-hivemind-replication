@@ -344,9 +344,11 @@ def compute_value_accuracy(ground_truth: dict, agent_result: dict,
     
     Strategy:
     1. Filter GT to only requested features
-    2. For date-keyed results, only compare overlapping dates
-    3. For each comparable value, check if within tolerance
-    4. Return per-query accuracy (fraction of matching values)
+    2. Flatten both dicts to leaf values
+    3. For date-keyed results (basic_retrieval, time_window), match by date+feature
+    4. For range-keyed results (multi_day_average, conditional_count, feature_range, period_comparison),
+       match by feature name ONLY (ignore parent key which may differ)
+    5. Return per-query accuracy (fraction of matching values)
     """
     # Step 1: Filter GT to requested features
     if requested_features:
@@ -370,73 +372,104 @@ def compute_value_accuracy(ground_truth: dict, agent_result: dict,
     if not gt_flat:
         return {"value_matches": 0, "value_total": 0, "value_accuracy": 1.0}
     
-    # Extract date keys from both
-    gt_date_keys = set()
-    agent_date_keys = set()
-    for k in gt_flat:
-        parts = k.split("/")
-        if re.match(r'\d{4}-\d{2}-\d{2}', parts[0]):
-            gt_date_keys.add(parts[0])
-    for k in agent_flat:
-        parts = k.split("/")
-        if re.match(r'\d{4}-\d{2}-\d{2}', parts[0]):
-            agent_date_keys.add(parts[0])
+    # Determine if GT is date-keyed (top-level keys are YYYY-MM-DD)
+    top_keys = list(ground_truth.keys())
+    is_date_keyed = all(re.match(r'\d{4}-\d{2}-\d{2}', str(k)) for k in top_keys) if top_keys else False
     
-    overlapping_dates = gt_date_keys & agent_date_keys
-    has_date_keys = bool(gt_date_keys)
+    # Build agent feature lookup (feature_name -> list of (value, full_key))
+    agent_by_feature = {}
+    for k, v in agent_flat.items():
+        feat = k.split("/")[-1]
+        if feat not in agent_by_feature:
+            agent_by_feature[feat] = []
+        agent_by_feature[feat].append((v, k))
     
     matches = 0
     total = 0
     
-    for gt_key, gt_val in gt_flat.items():
-        try:
-            gt_num = float(gt_val)
-        except (ValueError, TypeError):
-            continue
+    if is_date_keyed:
+        # Date-keyed: match by date + feature name
+        agent_date_keys = set()
+        for k in agent_flat:
+            parts = k.split("/")
+            if re.match(r'\d{4}-\d{2}-\d{2}', parts[0]):
+                agent_date_keys.add(parts[0])
         
-        # Skip minute-based values
-        feature_name = gt_key.split("/")[-1]
-        if feature_name.endswith("_minutes") or feature_name in ("min_time", "max_time"):
-            continue
+        gt_date_keys = set()
+        for k in gt_flat:
+            parts = k.split("/")
+            if re.match(r'\d{4}-\d{2}-\d{2}', parts[0]):
+                gt_date_keys.add(parts[0])
         
-        # If date-keyed, only count overlapping dates
-        parts = gt_key.split("/")
-        if has_date_keys and re.match(r'\d{4}-\d{2}-\d{2}', parts[0]):
+        overlapping_dates = gt_date_keys & agent_date_keys
+        
+        for gt_key, gt_val in gt_flat.items():
+            try:
+                gt_num = float(gt_val)
+            except (ValueError, TypeError):
+                continue
+            
+            feature_name = gt_key.split("/")[-1]
+            if feature_name.endswith("_minutes") or feature_name in ("min_time", "max_time"):
+                continue
+            
+            parts = gt_key.split("/")
             if parts[0] not in overlapping_dates:
                 continue
-        
-        total += 1
-        
-        # Try exact key match
-        if gt_key in agent_flat:
-            try:
-                agent_num = float(agent_flat[gt_key])
-                if _values_match(gt_num, agent_num, tolerance):
-                    matches += 1
-                continue
-            except (ValueError, TypeError):
-                pass
-        
-        # Try matching by feature name within same prefix
-        gt_prefix = "/".join(parts[:-1]) if len(parts) > 1 else ""
-        gt_feature = parts[-1]
-        
-        found = False
-        for agent_key, agent_val in agent_flat.items():
-            agent_parts = agent_key.split("/")
-            agent_prefix = "/".join(agent_parts[:-1]) if len(agent_parts) > 1 else ""
-            agent_feature = agent_parts[-1]
             
-            if gt_feature == agent_feature and gt_prefix == agent_prefix:
+            total += 1
+            
+            # Try exact key match first
+            if gt_key in agent_flat:
                 try:
-                    agent_num = float(agent_val)
+                    agent_num = float(agent_flat[gt_key])
                     if _values_match(gt_num, agent_num, tolerance):
                         matches += 1
-                    found = True
-                    break
-                except (ValueError, TypeError):
                     continue
+                except (ValueError, TypeError):
+                    pass
+            
+            # Try matching by date prefix + feature name
+            gt_date = parts[0]
+            for agent_key, agent_val in agent_flat.items():
+                a_parts = agent_key.split("/")
+                if a_parts[0] == gt_date and a_parts[-1] == feature_name:
+                    try:
+                        agent_num = float(agent_val)
+                        if _values_match(gt_num, agent_num, tolerance):
+                            matches += 1
+                        break
+                    except (ValueError, TypeError):
+                        continue
+    else:
+        # Range-keyed or single-result: match by feature name ONLY
+        # Collect all GT feature values (ignoring parent key)
+        gt_features = {}
+        for gt_key, gt_val in gt_flat.items():
+            try:
+                gt_num = float(gt_val)
+            except (ValueError, TypeError):
+                continue
+            
+            feature_name = gt_key.split("/")[-1]
+            if feature_name.endswith("_minutes") or feature_name in ("min_time", "max_time", "min_date", "max_date"):
+                continue
+            
+            gt_features[feature_name] = gt_num
         
+        for feature_name, gt_num in gt_features.items():
+            total += 1
+            
+            if feature_name in agent_by_feature:
+                for agent_val, agent_key in agent_by_feature[feature_name]:
+                    try:
+                        agent_num = float(agent_val)
+                        if _values_match(gt_num, agent_num, tolerance):
+                            matches += 1
+                        break
+                    except (ValueError, TypeError):
+                        continue
+    
     accuracy = matches / total if total > 0 else 1.0
     return {"value_matches": matches, "value_total": total, "value_accuracy": accuracy}
 

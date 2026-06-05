@@ -47,7 +47,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
                 filtered = filter_cgm_csv(df, dates=[d])
                 if filtered.empty:
                     continue
-                day_features = extract_features_json(filtered, sampling_rate)
+                day_features = extract_features_json(filtered, [d], sampling_rate)
                 gt[d] = {}
                 for feat in features:
                     if feat in day_features.get(d, {}):
@@ -64,7 +64,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
             filtered = filter_cgm_csv(df, dates=dates_str)
             if filtered.empty:
                 return gt
-            all_features = extract_features_json(filtered, sampling_rate)
+            all_features = extract_features_json(filtered, dates_str, sampling_rate)
             for feat in features:
                 avg_result = get_average(all_features, feat)
                 key = f"({dates_str[0]}, {dates_str[-1]})"
@@ -74,7 +74,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
             filtered = filter_cgm_csv(df, dates=dates_str)
             if filtered.empty:
                 return gt
-            all_features = extract_features_json(filtered, sampling_rate)
+            all_features = extract_features_json(filtered, dates_str, sampling_rate)
             condition = params.get('condition', 'hypo_events == 0')
             # Parse condition string: "feature_name operator threshold"
             cond_match = re.match(r'(\w+)\s*(>=|<=|==|>|<)\s*([\d.]+)', condition)
@@ -90,7 +90,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
             filtered = filter_cgm_csv(df, dates=dates_str)
             if filtered.empty:
                 return gt
-            all_features = extract_features_json(filtered, sampling_rate)
+            all_features = extract_features_json(filtered, dates_str, sampling_rate)
             feat = features[0]
             range_result = feature_range(all_features, feat)
             key = f"({dates_str[0]}, {dates_str[-1]})"
@@ -103,8 +103,8 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
             filtered_b = filter_cgm_csv(df, dates=[date_to_str(d) for d in dates_b])
             if filtered_a.empty or filtered_b.empty:
                 return gt
-            features_a = extract_features_json(filtered_a, sampling_rate)
-            features_b = extract_features_json(filtered_b, sampling_rate)
+            features_a = extract_features_json(filtered_a, [date_to_str(d) for d in dates_a], sampling_rate)
+            features_b = extract_features_json(filtered_b, [date_to_str(d) for d in dates_b], sampling_rate)
             feat = features[0]
             diff_result = compute_difference_ratio(features_a, features_b, feat)
             key = "comparison"
@@ -117,7 +117,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
                                        start_time=time_start, end_time=time_end)
             if filtered.empty:
                 return gt
-            day_features = extract_features_json(filtered, sampling_rate)
+            day_features = extract_features_json(filtered, dates_str, sampling_rate)
             for d in dates_str:
                 if d in day_features:
                     gt[d] = {}
@@ -130,7 +130,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
                 filtered = filter_cgm_csv(df, dates=[d])
                 if filtered.empty:
                     continue
-                exc = calculate_blood_glucose_excursion(filtered)
+                exc = calculate_blood_glucose_excursion(filtered, [d])
                 gt[d] = exc
                 
         elif query_type == 'trend':
@@ -141,7 +141,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
             trend_data = {}
             filtered['hour'] = pd.to_datetime(filtered['Date']).dt.hour
             for h in range(24):
-                hour_data = filtered[filtered['hour'] == h]['glucose']
+                hour_data = filtered[filtered['hour'] == h]['CGM']
                 if len(hour_data) > 0:
                     trend_data[f"hour_{h:02d}"] = round(float(hour_data.mean()), 1)
             key = f"({dates_str[0]}, {dates_str[-1]})"
