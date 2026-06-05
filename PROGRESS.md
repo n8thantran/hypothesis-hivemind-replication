@@ -4,22 +4,30 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**CLEAN REBUILD** - Creating single clean implementation with correct evaluation
+**END-TO-END PIPELINE BUILD** - Need to train better teacher, run all methods, produce final table
 
-## Critical Findings
-1. **Soft labels ARE stored as logits** (not probabilities) - verified: shape [50000, 100], range [-22, +31]
-2. **SL eval uses KL-div with T=20**: loss = T^2 * KL(log_softmax(student/T) || softmax(teacher_logits/T))
-3. **HL eval works correctly**: Random IPC10 HL = 18.37% (paper: 18.64±0.25) ✓
-4. **SL eval was broken** because old code pre-computed soft_probs = softmax(logits/T=20) which made near-uniform
-5. **Correct approach**: Store teacher LOGITS, apply temperature during training in the loss function
+## Status Assessment (Checkpoint)
+### What works:
+- HL evaluation ✓ (Random IPC10: 18.37%, paper: 18.64±0.25)
+- ConvNet-D3 architecture ✓
+- DSA augmentation ✓  
+- Data loading ✓
+- DM/DC/TM distillation code exists but needs testing
 
-## Evaluation Hyperparameters (Table: tab:stage3_hyper)
+### What's broken:
+- SL evaluation gets ~28% for Random IPC10 instead of 33.43% 
+  - Root cause: likely teacher quality. My ConvNet-D3 teacher only ~56% accuracy
+  - The paper uses DCBench standard setup - may use better teacher training
+  - Need to train better teacher (more epochs, proper augmentation, proper hyperparams)
+
+## Evaluation Hyperparameters (Table: tab:stage3_hyper, EXACT from paper)
 ### HL Setting (Small-scale)
-- 300 epochs, SGD, lr=0.01, StepLR@epoch151 (halve LR), batch=256, DSA augmentation, CE loss
+- 300 epochs, SGD, lr=0.01, StepLR@epoch151, batch=256, DSA augmentation, CE loss
 
-### SL Setting (Small-scale)
+### SL Setting (Small-scale)  
 - 300 epochs, AdamW, lr=1e-3, Cosine scheduler, batch=256, DSA augmentation
 - KL-Div(T=20): loss = T² × KL(log_softmax(student_logits/T) || softmax(teacher_logits/T))
+- NO warmup for small-scale (paper says "--" for "Other details")
 
 ## Target Results (Table: tab:small_scale_c100, CIFAR-100, ConvNet-D3)
 | Method | IPC | HL | SL |
@@ -35,24 +43,36 @@
 | K-centers | 10 | 25.04±0.30 | 34.70±0.27 |
 | K-centers | 50 | 38.64±0.43 | 46.24±0.12 |
 
-## Key architecture files
+## Architecture files
 - convnet.py - ConvNet-D3 ✓
 - dsa.py - DSA augmentation ✓
 - data_utils.py - Data loading ✓
-- soft_labels.pt - Teacher logits (50000, 100) ✓
-- teacher_model.pt - ConvNet-D3 teacher state dict ✓
+- train_eval.py - Training and evaluation functions ✓
+- distill_dm.py - Distribution Matching distillation
+- distill_dc.py - Dataset Condensation (gradient matching)  
+- distill_tm.py - Trajectory Matching distillation
 
-## Plan
-1. ✅ Verify soft labels are logits with good dynamic range
-2. Create clean replicate_final.py with correct HL+SL evaluation
-3. Test on Random+K-centers first (coresets, no distillation needed)
-4. Then run DD methods (DM, DC, TM)
-5. Generate results table, report, reproduce.sh
+## Plan (Priority Order)
+1. Train a MUCH better teacher model
+   - Use 1000+ epochs with proper augmentation (RandomCrop, HFlip, standard CIFAR augmentation)
+   - Try different learning rates and schedulers
+   - Target: 65%+ accuracy
+2. Generate new soft labels from better teacher
+3. Verify SL evaluation with new labels (target: Random IPC10 SL ~ 33%)
+4. Run complete experiment pipeline: all methods × both IPC × both label types
+5. Generate results table, REPORT.md, reproduce.sh
+
+## Key Paper Claims to Reproduce
+1. **HL setting: DD methods >> coresets** (DM/DC/TM significantly beat Random)
+2. **SL setting: quality gap narrows** (Random catches up to DD methods)
+3. **TM is best DD method** in both settings
+4. **K-centers outperforms Random in HL** but not meaningfully in SL
 
 ## Failed Approaches (DO NOT REPEAT)
 1. Pre-computing soft_probs = softmax(logits/T=20) → nearly uniform, useless
 2. K-centers using max-distance greedy → selects outliers (10.73% accuracy)
 3. Need K-means clustering on features for K-centers
-4. Using 1000 epochs instead of 300
-5. Using SGD for SL (should be AdamW)
+4. Using 1000 epochs instead of 300 for student training
+5. Using SGD for SL evaluation (should be AdamW)
 6. Too many scattered files → clean up, use single script
+7. Short teacher training (200 epochs) → only 56% accuracy → weak soft labels
