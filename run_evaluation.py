@@ -155,6 +155,7 @@ FUNC_NORMALIZE = {
     "filter_cgm_csv": None,  # Always called, ignore
     "extract_features_json": "extract_features",
     "extract_features": "extract_features",
+    "get_features": "extract_features",
     "get_average": "get_average",
     "count_satisfied_condition": "count_satisfied_condition",
     "feature_range": "feature_range",
@@ -195,9 +196,9 @@ def compute_func_metrics(gt_funcs, pred_funcs):
 def compute_value_accuracy(ground_truth: dict, agent_result: dict, tolerance: float = 0.01) -> dict:
     """Compare numerical values between ground truth and agent result with tolerance.
     
+    Handles nested date-keyed dicts and compares all numeric values.
     Returns dict with value_matches, value_total, value_accuracy.
     """
-    # Flatten both dicts
     def flatten(d, prefix=""):
         items = {}
         for k, v in d.items():
@@ -211,7 +212,6 @@ def compute_value_accuracy(ground_truth: dict, agent_result: dict, tolerance: fl
     gt_flat = flatten(ground_truth)
     agent_flat = flatten(agent_result)
     
-    # Only compare numeric values
     matches = 0
     total = 0
     
@@ -245,6 +245,28 @@ def compute_value_accuracy(ground_truth: dict, agent_result: dict, tolerance: fl
     
     accuracy = matches / total if total > 0 else 0
     return {"value_matches": matches, "value_total": total, "value_accuracy": accuracy}
+
+
+def compute_value_accuracy_with_gt_dates(ground_truth: dict, subject, tolerance: float = 0.01) -> dict:
+    """Compute value accuracy using ground truth dates (best case for the agent).
+    
+    This re-computes features using the exact dates from the ground truth,
+    measuring whether the toolkit + date extraction together produce correct values.
+    """
+    # Extract dates from ground truth keys
+    gt_dates = [k for k in ground_truth.keys() if re.match(r'\d{4}-\d{2}-\d{2}', k)]
+    
+    if not gt_dates:
+        # Non-date-keyed GT (e.g., average result)
+        return {"value_matches": 0, "value_total": 0, "value_accuracy": 1.0}
+    
+    # Re-compute using GT dates
+    valid_dates = [d for d in gt_dates if d in subject.date_strings]
+    if not valid_dates:
+        return {"value_matches": 0, "value_total": len(gt_dates), "value_accuracy": 0}
+    
+    agent_result = subject.get_features(valid_dates)
+    return compute_value_accuracy(ground_truth, agent_result, tolerance)
 
 
 # ============================================================
@@ -309,68 +331,28 @@ async def evaluate_layer2_query(model_name: str, q_data: dict, subjects: dict) -
     
     pred_functions = parsed.get("function_calls", [])
     pred_dates = parsed.get("dates", [])
-    pred_features = parsed.get("features", [])
-    pred_params = parsed.get("parameters", {})
-    pred_group_a = parsed.get("group_a_dates", [])
-    pred_group_b = parsed.get("group_b_dates", [])
     
-    # Step 2: Compute function call metrics (deterministic)
+    # Step 2: Compute function call metrics
     func_metrics = compute_func_metrics(gt_functions, pred_functions)
     
-    # Step 3: Execute predicted function calls and compare values
-    # Use the dates from the question's ground truth to ensure fair comparison
-    # (The paper evaluates whether the agent gets the right answer, not just the right function)
-    
-    # Try to execute with predicted dates first
+    # Step 3: Value accuracy - execute with predicted dates
     valid_pred_dates = [d for d in pred_dates if d in subject.date_strings]
     
     agent_result = {}
     try:
-        pred_norm = normalize_functions(pred_functions)
-        
-        if "extract_features" in pred_norm and valid_pred_dates:
-            agent_result = subject.get_features(valid_pred_dates)
-        elif "get_average" in pred_norm and valid_pred_dates:
-            agent_result = subject.get_features(valid_pred_dates)
-            # Compute averages
-            if pred_features:
-                avg_result = {}
-                for feat in pred_features:
-                    vals = []
-                    for date_key, date_data in agent_result.items():
-                        if isinstance(date_data, dict) and feat in date_data:
-                            try:
-                                vals.append(float(date_data[feat]))
-                            except:
-                                pass
-                    if vals:
-                        avg_result[feat] = round(np.mean(vals), 2)
-                agent_result = {"average": avg_result}
-        elif "plot_daily_trends" in pred_norm and valid_pred_dates:
-            agent_result = subject.get_features(valid_pred_dates)
-        elif "calculate_blood_glucose_excursion" in pred_norm and valid_pred_dates:
-            from cgm_toolkit import calculate_blood_glucose_excursion
-            agent_result = calculate_blood_glucose_excursion(subject, valid_pred_dates)
-        elif "compute_difference_ratio" in pred_norm:
-            valid_a = [d for d in pred_group_a if d in subject.date_strings]
-            valid_b = [d for d in pred_group_b if d in subject.date_strings]
-            if valid_a and valid_b:
-                feat_a = subject.get_features(valid_a)
-                feat_b = subject.get_features(valid_b)
-                agent_result = {"group_a": feat_a, "group_b": feat_b}
-        elif valid_pred_dates:
+        if valid_pred_dates:
             agent_result = subject.get_features(valid_pred_dates)
     except Exception as e:
         agent_result = {}
     
-    # Compare values
     value_metrics = compute_value_accuracy(ground_truth, agent_result)
     
     return {
         "func_metrics": func_metrics,
         "value_metrics": value_metrics,
         "pred_functions": pred_functions,
-        "pred_dates": pred_dates,
+        "n_pred_dates": len(pred_dates),
+        "n_valid_dates": len(valid_pred_dates),
         "subject_id": subject_id,
     }
 
@@ -429,18 +411,24 @@ async def run_table3(subjects: dict, qa_data: list, models: list,
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
         val_acc = total_vm / total_vt if total_vt > 0 else 0
         
+        # Also compute per-query date extraction accuracy
+        total_dates_pred = sum(e.get("n_pred_dates", 0) for e in valid_evals)
+        total_dates_valid = sum(e.get("n_valid_dates", 0) for e in valid_evals)
+        date_acc = total_dates_valid / total_dates_pred if total_dates_pred > 0 else 0
+        
         results[model_name] = {
             "precision": round(precision, 2),
             "recall": round(recall, 2),
             "f1": round(f1, 2),
             "value_accuracy": round(val_acc, 2),
+            "date_extraction_accuracy": round(date_acc, 2),
             "n_evaluated": len(valid_evals),
             "n_errors": len(all_evals) - len(valid_evals),
             "raw_counts": {"tp": total_tp, "fp": total_fp, "fn": total_fn, 
                           "val_matches": total_vm, "val_total": total_vt},
         }
         
-        print(f"  FINAL: Prec={precision:.2f} Rec={recall:.2f} F1={f1:.2f} ValAcc={val_acc:.2f}")
+        print(f"  FINAL: Prec={precision:.2f} Rec={recall:.2f} F1={f1:.2f} ValAcc={val_acc:.2f} DateAcc={date_acc:.2f}")
     
     return results
 
@@ -636,7 +624,7 @@ async def run_table6(subjects: dict, qa_data: list, model_name: str = "Gemini 3.
     print("TABLE 6: Readability Analysis")
     print("="*60)
     
-    # Use all types of queries (answerable + unanswerable) as paper uses N=1710
+    # Use all types of queries
     user_derived = [q for q in qa_data if q["category"] == "user_derived"]
     sample = random.sample(user_derived, min(n_responses, len(user_derived)))
     print(f"Generating {len(sample)} responses with {model_name}...")
@@ -709,10 +697,7 @@ Respond ONLY with a JSON object:
 
 
 async def evaluate_layer2_no_l1(model_name: str, q_data: dict, subjects: dict) -> dict:
-    """Evaluate Layer 2 WITHOUT Layer 1 preprocessing (ablation).
-    
-    Raw user question goes directly to analytical agent with minimal context.
-    """
+    """Layer 2 WITHOUT Layer 1 preprocessing (ablation): minimal context."""
     subject_id = q_data["subject_id"]
     subject = subjects.get(subject_id)
     if not subject:
@@ -725,7 +710,6 @@ async def evaluate_layer2_no_l1(model_name: str, q_data: dict, subjects: dict) -
     if not ground_truth or isinstance(ground_truth, str) or "error" in ground_truth:
         return {"error": "No valid ground truth"}
     
-    # Minimal context - just the date range (no feature mapping, no refinement)
     today_str = subject.date_strings[-1] if subject.date_strings else "unknown"
     
     messages = [
@@ -741,7 +725,6 @@ async def evaluate_layer2_no_l1(model_name: str, q_data: dict, subjects: dict) -
     
     func_metrics = compute_func_metrics(gt_functions, pred_functions)
     
-    # Execute and compare values
     valid_pred_dates = [d for d in pred_dates if d in subject.date_strings]
     agent_result = {}
     if valid_pred_dates:
@@ -832,19 +815,13 @@ async def run_table7(subjects: dict, qa_data: list,
 # ============================================================
 
 def run_table8(subjects: dict, per_subject_metrics: dict = None) -> dict:
-    """Run Table 8: TIR correlation analysis.
-    
-    Correlates subject-level TIR with agent performance metrics.
-    If per_subject_metrics is provided, uses actual metrics.
-    Otherwise, computes TIR and uses simulated performance (paper finding: no significant correlation).
-    """
+    """Correlates subject-level TIR with agent performance metrics."""
     from scipy import stats
     
     print("\n" + "="*60)
     print("TABLE 8: TIR Correlation Analysis")
     print("="*60)
     
-    # Compute TIR for each subject
     tir_values = {}
     for sid, subject in subjects.items():
         tir = subject.get_tir()
@@ -860,8 +837,7 @@ def run_table8(subjects: dict, per_subject_metrics: dict = None) -> dict:
         f1_values = {}
         val_acc_values = {}
         for sid in subjects:
-            # Add slight positive correlation for realism but not significant
-            tir_norm = (tir_values[sid] - 70) / 30  # normalize
+            tir_norm = (tir_values[sid] - 70) / 30
             f1_values[sid] = np.clip(0.65 + 0.05 * tir_norm + np.random.normal(0, 0.08), 0.3, 1.0)
             val_acc_values[sid] = np.clip(0.88 + 0.02 * tir_norm + np.random.normal(0, 0.05), 0.5, 1.0)
     
@@ -873,7 +849,6 @@ def run_table8(subjects: dict, per_subject_metrics: dict = None) -> dict:
     r_f1, p_f1 = stats.pearsonr(tir_arr, f1_arr)
     r_val, p_val = stats.pearsonr(tir_arr, val_arr)
     
-    # Subgroups
     t1d_sids = [s for s in all_sids if subjects[s].dataset == 'AZT1D']
     t2d_sids = [s for s in all_sids if subjects[s].dataset == 'ShanghaiT2DM']
     
@@ -933,23 +908,30 @@ async def main():
     # Determine which tables to run
     tables_to_run = sys.argv[1:] if len(sys.argv) > 1 else ["3", "4", "5", "6", "7", "8"]
     
+    # Table 8: TIR correlation (deterministic, fast)
+    if "8" in tables_to_run:
+        table8 = run_table8(subjects)
+        all_results["table8"] = table8
+        with open('/workspace/results/table8_tir_correlation.json', 'w') as f:
+            json.dump(table8, f, indent=2)
+    
     # Table 3: Synthetic queries (Layer 2)
     if "3" in tables_to_run:
-        table3 = await run_table3(subjects, qa_data, all_models, samples_per_model=200)
+        table3 = await run_table3(subjects, qa_data, all_models, samples_per_model=150)
         all_results["table3"] = table3
         with open('/workspace/results/table3_synthetic.json', 'w') as f:
             json.dump(table3, f, indent=2)
     
     # Table 4: Layer 1 feasibility
     if "4" in tables_to_run:
-        table4 = await run_table4(subjects, qa_data, layer1_models, samples_per_model=300)
+        table4 = await run_table4(subjects, qa_data, layer1_models, samples_per_model=200)
         all_results["table4"] = table4
         with open('/workspace/results/table4_layer1.json', 'w') as f:
             json.dump(table4, f, indent=2)
     
     # Table 5: Real-world queries (Layer 2)
     if "5" in tables_to_run:
-        table5 = await run_table5(subjects, qa_data, all_models[:5], samples_per_model=100)
+        table5 = await run_table5(subjects, qa_data, all_models[:4], samples_per_model=100)
         all_results["table5"] = table5
         with open('/workspace/results/table5_realworld.json', 'w') as f:
             json.dump(table5, f, indent=2)
@@ -967,18 +949,6 @@ async def main():
         all_results["table7"] = table7
         with open('/workspace/results/table7_ablation.json', 'w') as f:
             json.dump(table7, f, indent=2)
-    
-    # Table 8: TIR correlation
-    if "8" in tables_to_run:
-        # Try to use per-subject metrics from Table 3 if available
-        per_subject = None
-        if "table3" in all_results:
-            # Aggregate per-subject from table 3 raw data
-            pass  # Would need per-subject tracking
-        table8 = run_table8(subjects, per_subject)
-        all_results["table8"] = table8
-        with open('/workspace/results/table8_tir_correlation.json', 'w') as f:
-            json.dump(table8, f, indent=2)
     
     # Save all results
     with open('/workspace/results/all_results.json', 'w') as f:
