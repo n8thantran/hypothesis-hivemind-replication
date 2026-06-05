@@ -5,12 +5,11 @@ Includes: data loading, coreset selection (Random, K-centers), soft label genera
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
-import torchvision.transforms as transforms
 import numpy as np
 from collections import defaultdict
-from sklearn.metrics import pairwise_distances
-import os
+from datasets import load_dataset
+from PIL import Image
+import torchvision.transforms as transforms
 
 
 # CIFAR-100 mean and std
@@ -18,46 +17,30 @@ CIFAR100_MEAN = [0.5071, 0.4867, 0.4408]
 CIFAR100_STD = [0.2675, 0.2565, 0.2761]
 
 
-def get_cifar100(data_path='./data'):
-    """Load CIFAR-100 train and test sets."""
-    transform_train = transforms.Compose([
+def get_cifar100_tensors(data_path='/workspace/data/hf_cache'):
+    """Get CIFAR-100 as tensors (images, labels) using HuggingFace datasets."""
+    ds = load_dataset('uoft-cs/cifar100', cache_dir=data_path)
+    
+    transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(CIFAR100_MEAN, CIFAR100_STD),
     ])
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR100_MEAN, CIFAR100_STD),
-    ])
     
-    trainset = torchvision.datasets.CIFAR100(root=data_path, train=True, 
-                                              download=True, transform=transform_train)
-    testset = torchvision.datasets.CIFAR100(root=data_path, train=False, 
-                                             download=True, transform=transform_test)
-    return trainset, testset
-
-
-def get_cifar100_tensors(data_path='./data'):
-    """Get CIFAR-100 as tensors (images, labels) for the full training set."""
-    trainset, testset = get_cifar100(data_path)
+    def process_split(split):
+        images = []
+        labels = []
+        for example in split:
+            img = example['img']
+            if not isinstance(img, Image.Image):
+                img = Image.fromarray(img)
+            images.append(transform(img))
+            labels.append(example['fine_label'])
+        return torch.stack(images), torch.tensor(labels, dtype=torch.long)
     
-    # Convert to tensors
-    train_images = []
-    train_labels = []
-    for img, label in trainset:
-        train_images.append(img)
-        train_labels.append(label)
-    
-    train_images = torch.stack(train_images)
-    train_labels = torch.tensor(train_labels)
-    
-    test_images = []
-    test_labels = []
-    for img, label in testset:
-        test_images.append(img)
-        test_labels.append(label)
-    
-    test_images = torch.stack(test_images)
-    test_labels = torch.tensor(test_labels)
+    print("Processing train split...")
+    train_images, train_labels = process_split(ds['train'])
+    print("Processing test split...")
+    test_images, test_labels = process_split(ds['test'])
     
     return train_images, train_labels, test_images, test_labels
 
@@ -65,8 +48,8 @@ def get_cifar100_tensors(data_path='./data'):
 def get_class_indices(labels, num_classes=100):
     """Get indices for each class."""
     class_indices = defaultdict(list)
-    for i, label in enumerate(labels):
-        class_indices[int(label)].append(i)
+    for i in range(len(labels)):
+        class_indices[int(labels[i])].append(i)
     return class_indices
 
 
@@ -103,7 +86,7 @@ def k_centers_select(images, labels, ipc, num_classes=100, seed=0):
         chosen.append(first)
         
         if ipc == 1:
-            selected.append(indices[first])
+            selected.append(int(indices[first]))
             continue
         
         # Compute distances from first point
@@ -118,7 +101,7 @@ def k_centers_select(images, labels, ipc, num_classes=100, seed=0):
             next_idx = np.argmax(dists)
             chosen.append(next_idx)
         
-        selected.extend(indices[chosen].tolist())
+        selected.extend([int(indices[c_idx]) for c_idx in chosen])
     
     return sorted(selected)
 
@@ -126,11 +109,8 @@ def k_centers_select(images, labels, ipc, num_classes=100, seed=0):
 def generate_soft_labels(train_images, train_labels, model_fn, num_classes=100, 
                          device='cuda', num_models=3, epochs=200, seed=42):
     """
-    Generate soft labels by training teacher models on full CIFAR-100 and 
+    Generate soft labels by training teacher models on full CIFAR-100 and
     averaging their softmax outputs.
-    
-    For the SL setting, we need fixed soft labels from a teacher.
-    We train ConvNet-D3 teachers on the full dataset and use their predictions.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -177,10 +157,6 @@ def generate_soft_labels(train_images, train_labels, model_fn, num_classes=100,
     
     # Average logits across teachers
     avg_logits = torch.stack(all_logits).mean(dim=0)
-    
-    # Convert to soft labels (probabilities)
-    # Use temperature=20 as specified in the paper for SL training
-    # But store raw logits so we can apply temperature during training
     return avg_logits
 
 
