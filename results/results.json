@@ -82,5 +82,16 @@
     "method": "k_centers",
     "ipc": 50,
     "label_type": "hard"
+  },
+  "k_centers_ipc50_soft": {
+    "mean": 39.38,
+    "std": 0.0,
+    "runs": [
+      39.38
+    ],
+    "method": "k_centers",
+    "ipc": 50,
+    "label_type": "soft",
+    "time": 143.4186954498291
   }
 }
