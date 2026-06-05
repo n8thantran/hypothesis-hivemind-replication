@@ -65,19 +65,32 @@ def random_select(labels, ipc, num_classes=100, seed=0):
     return sorted(selected)
 
 
-def k_centers_select(images, labels, ipc, num_classes=100, seed=0):
+def k_centers_select(images, labels, ipc, num_classes=100, seed=0,
+                     use_features=True, feature_model=None, device='cuda'):
     """
     K-Centers coreset selection: greedy farthest-first traversal per class.
-    Uses pixel-space features (flattened images).
+    
+    If use_features=True, extracts features from a ConvNet model (random init if 
+    feature_model is None, or pretrained if provided) - much better coverage.
+    If use_features=False, uses pixel-space (flattened images).
     """
     np.random.seed(seed)
     class_indices = get_class_indices(labels, num_classes)
-    selected = []
     
+    # Extract features if requested
+    if use_features:
+        features_all = _extract_features(images, feature_model, device)
+    else:
+        features_all = images.reshape(len(images), -1).numpy()
+    
+    selected = []
     for c in range(num_classes):
         indices = np.array(class_indices[c])
-        # Use flattened images as features
-        features = images[indices].reshape(len(indices), -1).numpy()
+        
+        if isinstance(features_all, np.ndarray):
+            features = features_all[indices]
+        else:
+            features = features_all[indices].numpy()
         
         # Greedy farthest-first traversal
         chosen = []
@@ -104,6 +117,29 @@ def k_centers_select(images, labels, ipc, num_classes=100, seed=0):
         selected.extend([int(indices[c_idx]) for c_idx in chosen])
     
     return sorted(selected)
+
+
+def _extract_features(images, model=None, device='cuda'):
+    """Extract features from images using a ConvNet model."""
+    from convnet import ConvNet
+    
+    if model is None:
+        # Use a randomly initialized model for feature extraction
+        # This still gives better features than raw pixels due to architecture inductive biases
+        # A pretrained model gives even better features
+        model = ConvNet(num_classes=100, channel=3, im_size=(32, 32)).to(device)
+    
+    model.eval()
+    all_features = []
+    
+    with torch.no_grad():
+        for i in range(0, len(images), 256):
+            batch = images[i:i+256].to(device)
+            feat = model.embed(batch)
+            all_features.append(feat.cpu())
+    
+    features = torch.cat(all_features, dim=0)
+    return features.numpy()
 
 
 def generate_soft_labels(train_images, train_labels, model_fn, num_classes=100, 
@@ -170,6 +206,10 @@ if __name__ == '__main__':
     selected = random_select(train_labels, ipc=10)
     print(f"Random select IPC=10: {len(selected)} samples")
     
-    # Test K-centers selection
-    selected = k_centers_select(train_images, train_labels, ipc=10)
-    print(f"K-centers select IPC=10: {len(selected)} samples")
+    # Test K-centers selection (feature-space)
+    selected = k_centers_select(train_images, train_labels, ipc=10, use_features=True)
+    print(f"K-centers select (feature) IPC=10: {len(selected)} samples")
+    
+    # Test K-centers selection (pixel-space)
+    selected = k_centers_select(train_images, train_labels, ipc=10, use_features=False)
+    print(f"K-centers select (pixel) IPC=10: {len(selected)} samples")
