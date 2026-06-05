@@ -24,7 +24,7 @@ np.random.seed(42)
 
 def get_valid_dates(df, min_readings=10):
     """Get dates with sufficient data."""
-    df['date'] = pd.to_datetime(df['timestamp']).dt.date
+    df['date'] = pd.to_datetime(df['Date']).dt.date
     date_counts = df.groupby('date').size()
     valid = date_counts[date_counts >= min_readings].index.tolist()
     return sorted(valid)
@@ -107,7 +107,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
             time_start = params.get('time_start', '06:00')
             time_end = params.get('time_end', '12:00')
             filtered = filter_cgm_csv(df, dates=dates_str, 
-                                       time_start=time_start, time_end=time_end)
+                                       start_time=time_start, end_time=time_end)
             if filtered.empty:
                 return gt
             day_features = extract_features_json(filtered, sampling_rate)
@@ -132,7 +132,7 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
                 return gt
             # For trends, ground truth is the mean values per hour
             trend_data = {}
-            filtered['hour'] = pd.to_datetime(filtered['timestamp']).dt.hour
+            filtered['hour'] = pd.to_datetime(filtered['Date']).dt.hour
             for h in range(24):
                 hour_data = filtered[filtered['hour'] == h]['glucose']
                 if len(hour_data) > 0:
@@ -221,8 +221,8 @@ def generate_synthetic_questions(subjects, target_per_subject=130):
     }
     
     for subj_id, subj_data in subjects.items():
-        df = subj_data['df']
-        sampling_rate = subj_data['sampling_rate']
+        df = subj_data.df
+        sampling_rate = subj_data.sampling_rate
         valid_dates = get_valid_dates(df)
         
         if len(valid_dates) < 7:
@@ -419,8 +419,8 @@ def generate_synthetic_questions(subjects, target_per_subject=130):
                 'function_calls': ['filter_cgm_csv', 'calculate_blood_glucose_excursion'],
             })
         
-        # 8. Trend visualization (~10 per subject)
-        for _ in range(10):
+        # 8. Trend visualization (~15 per subject)
+        for _ in range(15):
             n_days = random.choice([3, 5, 7])
             start_idx = random.randint(0, max(0, len(valid_dates) - n_days))
             dates = valid_dates[start_idx:start_idx + n_days]
@@ -533,8 +533,8 @@ def generate_user_derived_questions(subjects, target_per_subject=90):
     ]
     
     for subj_id, subj_data in subjects.items():
-        df = subj_data['df']
-        sampling_rate = subj_data['sampling_rate']
+        df = subj_data.df
+        sampling_rate = subj_data.sampling_rate
         valid_dates = get_valid_dates(df)
         
         if len(valid_dates) < 7:
