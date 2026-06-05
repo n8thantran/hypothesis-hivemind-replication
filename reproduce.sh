@@ -1,89 +1,72 @@
 #!/bin/bash
-# Reproduce the Hypothesis Hivemind experiment from:
-# "Agentic AI Scientists Are Not Built for Autonomous Scientific Discovery"
-#
-# This script reproduces Figures 1A, 1B, 2, and 3 from the paper.
-#
-# Prerequisites:
-#   - OPENROUTER_API_KEY environment variable set
-#   - Python 3 with pip
-#
-# The full pipeline takes ~2-3 hours due to 6000+ API calls.
-# If data already exists, only the analysis step runs (~10 seconds).
+# Reproduce all key results from the CGM-Agent paper
+# Usage: bash reproduce.sh [table_number]
+# If no table_number given, runs all tables
 
 set -e
 
-echo "=== Hypothesis Hivemind Replication ==="
-echo ""
+echo "=========================================="
+echo "CGM-Agent Replication - Reproduce Script"
+echo "=========================================="
 
 # Install dependencies
-echo "Installing dependencies..."
-pip install -q pymupdf aiohttp numpy matplotlib scikit-learn scipy
+pip install textstat aiohttp pandas numpy scipy -q
 
-# Step 1: Download papers (50 from NeurIPS 2025 AI4Mat)
-if [ ! -d "data/papers" ] || [ $(ls data/papers/*.pdf 2>/dev/null | wc -l) -lt 50 ]; then
-    echo "Step 1: Downloading papers..."
-    python3 download_papers.py
+# Create results directory  
+mkdir -p /workspace/results
+
+# Step 1: Generate QA dataset (if not already generated)
+if [ ! -f /workspace/results/qa_dataset.json ]; then
+    echo ""
+    echo "[Step 1] Generating QA dataset..."
+    python3 /workspace/generate_questions.py
 else
-    echo "Step 1: Papers already downloaded (50 PDFs found)"
+    echo "[Step 1] QA dataset already exists, skipping generation"
 fi
 
-# Step 2: Extract text from PDFs
-if [ ! -f "data/paper_texts.json" ]; then
-    echo "Step 2: Extracting text from PDFs..."
-    python3 extract_text.py
-else
-    echo "Step 2: Paper texts already extracted"
+# Determine which tables to run
+TABLE_ARG=${1:-"all"}
+
+if [ "$TABLE_ARG" = "all" ] || [ "$TABLE_ARG" = "3" ]; then
+    echo ""
+    echo "[Step 2] Running Table 3: Synthetic Layer 2 evaluation..."
+    python3 /workspace/run_evaluation_v2.py 3
 fi
 
-# Step 3: Generate experiment summaries (Task 1 input)
-if [ ! -f "data/outputs/experiment_summaries.json" ]; then
-    echo "Step 3: Generating experiment summaries..."
-    python3 generate_summaries.py
-else
-    echo "Step 3: Experiment summaries already generated"
+if [ "$TABLE_ARG" = "all" ] || [ "$TABLE_ARG" = "4" ]; then
+    echo ""
+    echo "[Step 3] Running Table 4: Layer 1 feasibility classification..."
+    python3 /workspace/run_evaluation_v2.py 4
 fi
 
-# Step 4: Generate hypotheses for Task 1 (recover underlying hypothesis)
-if [ ! -f "data/outputs/task1_hypotheses.json" ]; then
-    echo "Step 4: Generating Task 1 hypotheses (3000 API calls)..."
-    python3 generate_hypotheses.py task1
-else
-    echo "Step 4: Task 1 hypotheses already generated"
+if [ "$TABLE_ARG" = "all" ] || [ "$TABLE_ARG" = "5" ]; then
+    echo ""
+    echo "[Step 4] Running Table 5: Real-world Layer 2 evaluation..."
+    python3 /workspace/run_evaluation_v2.py 5
 fi
 
-# Step 5: Generate hypotheses for Task 2 (novel hypotheses)
-if [ ! -f "data/outputs/task2_hypotheses.json" ]; then
-    echo "Step 5: Generating Task 2 hypotheses (3000 API calls)..."
-    python3 generate_hypotheses.py task2
-else
-    echo "Step 5: Task 2 hypotheses already generated"
+if [ "$TABLE_ARG" = "all" ] || [ "$TABLE_ARG" = "6" ]; then
+    echo ""
+    echo "[Step 5] Running Table 6: Readability analysis..."
+    python3 /workspace/run_evaluation_v2.py 6
 fi
 
-# Step 6: Compute embeddings
-if [ ! -f "data/outputs/task1_embeddings.npz" ]; then
-    echo "Step 6a: Computing Task 1 embeddings..."
-    python3 compute_embeddings.py task1
-else
-    echo "Step 6a: Task 1 embeddings already computed"
+if [ "$TABLE_ARG" = "all" ] || [ "$TABLE_ARG" = "7" ]; then
+    echo ""
+    echo "[Step 6] Running Table 7: Ablation study..."    
+    python3 /workspace/run_evaluation_v2.py 7
 fi
 
-if [ ! -f "data/outputs/task2_embeddings.npz" ]; then
-    echo "Step 6b: Computing Task 2 embeddings..."
-    python3 compute_embeddings.py task2
-else
-    echo "Step 6b: Task 2 embeddings already computed"
+if [ "$TABLE_ARG" = "all" ] || [ "$TABLE_ARG" = "8" ]; then
+    echo ""
+    echo "[Step 7] Running Table 8: TIR correlation analysis..."
+    python3 /workspace/run_evaluation_v2.py 8
 fi
-
-# Step 7: Analyze and generate figures
-echo "Step 7: Analyzing embeddings and generating figures..."
-python3 analyze_and_plot.py
 
 echo ""
-echo "=== Done ==="
-echo "Results saved to /workspace/results/"
-echo "  - figure1a_heatmap_task1.{pdf,png}  (Fig 1A: Inter-model similarity, convergence task)"
-echo "  - figure1b_heatmap_task2.{pdf,png}  (Fig 1B: Inter-model similarity, diversity task)"
-echo "  - figure2_intra_model_similarity.{pdf,png}  (Fig 2: Intra-model similarity)"
-echo "  - figure3_kde_distributions.{pdf,png}  (Fig 3: Same vs different paper distributions)"
-echo "  - metrics.json  (All numerical results)"
+echo "=========================================="
+echo "All results saved to /workspace/results/"
+echo "=========================================="
+echo ""
+echo "Result files:"
+ls -la /workspace/results/table*.json 2>/dev/null || echo "No result files found"
