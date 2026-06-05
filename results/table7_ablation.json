@@ -1,0 +1,18 @@
+{
+  "full_pipeline": {
+    "precision": 0.34,
+    "recall": 0.24,
+    "f1": 0.28,
+    "value_accuracy": 0.24,
+    "n": 100
+  },
+  "no_layer1": {
+    "precision": 0.34,
+    "recall": 0.28,
+    "f1": 0.31,
+    "value_accuracy": 0.1,
+    "n": 100
+  },
+  "delta_f1": -0.03,
+  "delta_val_acc": 0.14
+}
