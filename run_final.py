@@ -1,551 +1,686 @@
 """
 Final comprehensive experiment runner for paper replication.
-Runs all 20 configs (5 methods × 2 IPC × 2 label types) with 3 trials each.
-Time-optimized with GPU-resident data.
+Reproduces Table: tab:small_scale_c100 (CIFAR-100, ConvNet-D3)
+
+Phase 1: Coreset methods (Random, K-centers) - real images
+Phase 2: DD methods (DM, DC, TM) - distilled images
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import json
-import time
 import os
 import sys
-from convnet import ConvNet
-from dsa import DiffAugment
-from data_utils import get_cifar100_tensors
+import time
+import argparse
 
-DEVICE = 'cuda'
-NUM_CLASSES = 100
+from convnet import get_convnet_d3, ConvNet
+from data_utils import get_cifar100_tensors, random_select, get_class_indices
+from evaluate import evaluate_hl, evaluate_sl, evaluate_multiple_runs
 
 
-def train_and_eval_fast(train_imgs, train_labels, test_imgs_gpu, test_labels_gpu,
-                        label_type='hard', soft_labels=None,
-                        epochs=300, batch_size=256, seed=0):
-    """Fast training with GPU-resident test data."""
+def train_teacher(train_images, train_labels, device='cuda', epochs=300, seed=42):
+    """Train a teacher model on full CIFAR-100 for soft label generation and feature extraction."""
+    from dsa import DiffAugment
+    
+    teacher_path = '/workspace/teacher_model.pt'
+    if os.path.exists(teacher_path):
+        print("Loading existing teacher model...")
+        model = get_convnet_d3().to(device)
+        model.load_state_dict(torch.load(teacher_path, map_location=device, weights_only=True))
+        model.eval()
+        # Quick accuracy check
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for i in range(0, len(train_images), 256):
+                batch = train_images[i:i+256].to(device)
+                labels = train_labels[i:i+256].to(device)
+                out = model(batch)
+                correct += out.argmax(1).eq(labels).sum().item()
+                total += labels.size(0)
+        print(f"Teacher train accuracy: {100*correct/total:.2f}%")
+        return model
+    
+    print("Training teacher model on full CIFAR-100...")
     torch.manual_seed(seed)
     np.random.seed(seed)
     
-    model = ConvNet(num_classes=NUM_CLASSES, channel=3, im_size=(32, 32)).to(DEVICE)
+    model = get_convnet_d3().to(device)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=151, gamma=0.5)
     
-    # Move train data to GPU
-    train_imgs_gpu = train_imgs.to(DEVICE)
-    train_labels_gpu = train_labels.to(DEVICE)
-    if soft_labels is not None:
-        soft_labels_gpu = soft_labels.to(DEVICE)
+    images_gpu = train_images.to(device)
+    labels_gpu = train_labels.to(device)
+    n = len(images_gpu)
+    batch_size = 256
     
-    n_train = len(train_imgs_gpu)
-    
-    if label_type == 'hard':
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=151, gamma=0.1)
-        criterion = nn.CrossEntropyLoss()
-    else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-        temperature = 20.0
-    
-    model.train()
     for epoch in range(epochs):
-        perm = torch.randperm(n_train, device=DEVICE)
-        for i in range(0, n_train, batch_size):
+        model.train()
+        perm = torch.randperm(n, device=device)
+        epoch_loss = 0
+        n_batches = 0
+        
+        for i in range(0, n, batch_size):
             idx = perm[i:i+batch_size]
-            imgs = train_imgs_gpu[idx]
-            imgs = DiffAugment(imgs, strategy='color_crop_cutout_flip_scale_rotate')
+            batch_imgs = images_gpu[idx]
+            batch_labels = labels_gpu[idx]
+            
+            # Use DSA augmentation during teacher training too
+            batch_imgs = DiffAugment(batch_imgs, strategy='color_crop_cutout_flip_scale_rotate')
             
             optimizer.zero_grad()
-            out = model(imgs)
-            
-            if label_type == 'hard':
-                loss = criterion(out, train_labels_gpu[idx])
-            else:
-                log_probs = F.log_softmax(out / temperature, dim=1)
-                targets = F.softmax(soft_labels_gpu[idx] / temperature, dim=1)
-                loss = F.kl_div(log_probs, targets, reduction='batchmean') * (temperature ** 2)
-            
+            outputs = model(batch_imgs)
+            loss = F.cross_entropy(outputs, batch_labels)
             loss.backward()
             optimizer.step()
+            
+            epoch_loss += loss.item()
+            n_batches += 1
+        
         scheduler.step()
+        
+        if (epoch + 1) % 50 == 0:
+            model.eval()
+            correct = 0
+            total = 0
+            with torch.no_grad():
+                for i in range(0, n, 256):
+                    batch = images_gpu[i:i+256]
+                    labels = labels_gpu[i:i+256]
+                    out = model(batch)
+                    correct += out.argmax(1).eq(labels).sum().item()
+                    total += labels.size(0)
+            print(f"  Epoch {epoch+1}/{epochs}, Loss: {epoch_loss/n_batches:.4f}, Train Acc: {100*correct/total:.2f}%")
     
-    # Evaluate
-    model.eval()
-    correct = 0
+    torch.save(model.state_dict(), teacher_path)
+    print(f"Teacher model saved to {teacher_path}")
+    return model
+
+
+def generate_teacher_soft_labels(teacher, train_images, device='cuda'):
+    """Generate soft labels (logits) from teacher model."""
+    sl_path = '/workspace/teacher_soft_labels.pt'
+    if os.path.exists(sl_path):
+        print("Loading existing soft labels...")
+        return torch.load(sl_path, map_location='cpu', weights_only=True)
+    
+    print("Generating soft labels from teacher...")
+    teacher.eval()
+    all_logits = []
     with torch.no_grad():
-        for i in range(0, len(test_imgs_gpu), 512):
-            out = model(test_imgs_gpu[i:i+512])
-            correct += out.argmax(1).eq(test_labels_gpu[i:i+512]).sum().item()
-    return 100.0 * correct / len(test_labels_gpu)
-
-
-def run_trials(train_imgs, train_labels, test_imgs_gpu, test_labels_gpu,
-               label_type, soft_labels=None, num_trials=3, epochs=300):
-    """Run multiple trials and return mean±std."""
-    accs = []
-    for trial in range(num_trials):
-        acc = train_and_eval_fast(train_imgs, train_labels, test_imgs_gpu, test_labels_gpu,
-                                   label_type=label_type, soft_labels=soft_labels,
-                                   epochs=epochs, seed=trial)
-        accs.append(acc)
-        print(f"    Trial {trial+1}: {acc:.2f}%")
-    mean = np.mean(accs)
-    std = np.std(accs)
-    print(f"    => {mean:.2f} ± {std:.2f}%")
-    return mean, std, accs
-
-
-def random_select(labels, ipc, seed=42):
-    """Select ipc images per class randomly."""
-    rng = np.random.RandomState(seed)
-    indices = []
-    for c in range(NUM_CLASSES):
-        cls_idx = (labels == c).nonzero(as_tuple=True)[0].numpy()
-        sel = rng.choice(cls_idx, size=ipc, replace=False)
-        indices.extend(sel.tolist())
-    return indices
-
-
-def k_centers_select(images, labels, ipc, teacher_model=None, seed=42):
-    """K-centers coreset selection in feature space."""
-    # Get features from teacher
-    if teacher_model is not None:
-        features_list = []
-        teacher_model.eval()
-        with torch.no_grad():
-            for i in range(0, len(images), 256):
-                batch = images[i:i+256].to(DEVICE)
-                # Get features from the embedding layer
-                feat = teacher_model.embed(batch)
-                features_list.append(feat.cpu())
-        features = torch.cat(features_list, dim=0)
-    else:
-        features = images.view(len(images), -1)
+        for i in range(0, len(train_images), 256):
+            batch = train_images[i:i+256].to(device)
+            logits = teacher(batch)
+            all_logits.append(logits.cpu())
     
-    indices = []
-    for c in range(NUM_CLASSES):
-        cls_mask = (labels == c)
-        cls_idx = cls_mask.nonzero(as_tuple=True)[0]
-        cls_feat = features[cls_idx]
+    logits = torch.cat(all_logits, dim=0)
+    torch.save(logits, sl_path)
+    print(f"Soft labels saved: {logits.shape}")
+    return logits
+
+
+def k_centers_select_proper(train_images, train_labels, ipc, teacher_model, 
+                             num_classes=100, device='cuda', seed=0):
+    """
+    K-Centers selection using teacher features + farthest-first traversal.
+    This is the DeepCore-style K-centers.
+    """
+    np.random.seed(seed)
+    
+    # Extract features using teacher
+    print("Extracting features for K-centers...")
+    teacher_model.eval()
+    all_features = []
+    with torch.no_grad():
+        for i in range(0, len(train_images), 256):
+            batch = train_images[i:i+256].to(device)
+            feat = teacher_model.embed(batch)
+            all_features.append(feat.cpu())
+    features = torch.cat(all_features, dim=0).numpy()
+    
+    # Normalize features
+    norms = np.linalg.norm(features, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-8)
+    features = features / norms
+    
+    class_indices = get_class_indices(train_labels, num_classes)
+    selected = []
+    
+    for c in range(num_classes):
+        indices = np.array(class_indices[c])
+        feats = features[indices]
         
-        # Greedy k-centers
-        n = len(cls_feat)
-        selected = []
-        # Start with random point
-        rng = np.random.RandomState(seed + c)
-        first = rng.randint(n)
-        selected.append(first)
+        # Farthest-first traversal (K-centers greedy)
+        chosen = []
+        # Start with the point closest to the class mean (centroid)
+        centroid = feats.mean(axis=0)
+        dists_to_centroid = np.sum((feats - centroid) ** 2, axis=1)
+        first = np.argmin(dists_to_centroid)
+        chosen.append(first)
         
-        # Compute distances to first center
-        dists = torch.cdist(cls_feat, cls_feat[first:first+1]).squeeze(1)
+        # Min-distance to chosen set
+        min_dists = np.sum((feats - feats[first:first+1]) ** 2, axis=1)
         
-        for _ in range(1, ipc):
-            # Select point with max min-distance
-            farthest = dists.argmax().item()
-            selected.append(farthest)
-            new_dists = torch.cdist(cls_feat, cls_feat[farthest:farthest+1]).squeeze(1)
-            dists = torch.min(dists, new_dists)
+        for _ in range(ipc - 1):
+            # Select the point farthest from the current chosen set
+            next_idx = np.argmax(min_dists)
+            chosen.append(next_idx)
+            # Update min distances
+            new_dists = np.sum((feats - feats[next_idx:next_idx+1]) ** 2, axis=1)
+            min_dists = np.minimum(min_dists, new_dists)
         
-        indices.extend(cls_idx[selected].tolist())
+        selected.extend([int(indices[c_idx]) for c_idx in chosen])
     
-    return indices
+    return sorted(selected)
 
 
-def distill_dm(train_images, train_labels, ipc, n_iter=10000, lr_img=1.0):
-    """Distribution Matching distillation."""
-    print(f"  DM distillation: ipc={ipc}, iter={n_iter}")
+def run_coreset_experiments(train_images, train_labels, test_images, test_labels,
+                            teacher_model, soft_labels, device='cuda', num_runs=3):
+    """Run all coreset experiments (Random, K-centers) for IPC 10 and 50."""
+    results = {}
     
-    # Initialize synthetic data from class means
-    syn_images = []
-    syn_labels = []
-    for c in range(NUM_CLASSES):
-        cls_idx = (train_labels == c).nonzero(as_tuple=True)[0]
-        cls_imgs = train_images[cls_idx]
-        perm = torch.randperm(len(cls_imgs))[:ipc]
-        syn_images.append(cls_imgs[perm].clone())
-        syn_labels.extend([c] * ipc)
-    
-    syn_images = torch.cat(syn_images, dim=0).to(DEVICE).requires_grad_(True)
-    syn_labels = torch.tensor(syn_labels, device=DEVICE)
-    train_images_gpu = train_images.to(DEVICE)
-    train_labels_gpu = train_labels.to(DEVICE)
-    
-    optimizer = torch.optim.SGD([syn_images], lr=lr_img, momentum=0.5)
-    
-    for it in range(n_iter):
-        # New random model each iteration
-        model = ConvNet(num_classes=NUM_CLASSES, channel=3, im_size=(32, 32)).to(DEVICE)
-        model.train()
-        
-        loss_total = 0
-        for c in range(NUM_CLASSES):
-            # Real features for class c
-            real_idx = (train_labels_gpu == c).nonzero(as_tuple=True)[0]
-            perm = torch.randperm(len(real_idx))[:256]
-            real_batch = train_images_gpu[real_idx[perm]]
-            real_batch = DiffAugment(real_batch, strategy='color_crop_cutout_flip_scale_rotate')
+    for ipc in [10, 50]:
+        for method in ['random', 'k_centers']:
+            print(f"\n{'='*60}")
+            print(f"Coreset: {method}, IPC={ipc}")
+            print(f"{'='*60}")
             
-            # Synthetic features for class c
-            syn_idx = (syn_labels == c).nonzero(as_tuple=True)[0]
-            syn_batch = syn_images[syn_idx]
-            syn_batch_aug = DiffAugment(syn_batch, strategy='color_crop_cutout_flip_scale_rotate')
+            # Select coreset
+            if method == 'random':
+                indices = random_select(train_labels, ipc, seed=0)
+            else:
+                indices = k_centers_select_proper(train_images, train_labels, ipc, 
+                                                   teacher_model, device=device, seed=0)
             
-            with torch.no_grad():
-                real_feat = model.embed(real_batch)
-            syn_feat = model.embed(syn_batch_aug)
+            subset_images = train_images[indices]
+            subset_labels = train_labels[indices]
+            subset_soft_labels = soft_labels[indices]
             
-            # Match means
-            loss_total += ((real_feat.mean(0) - syn_feat.mean(0)) ** 2).sum()
-        
-        optimizer.zero_grad()
-        loss_total.backward()
-        optimizer.step()
-        
-        if (it + 1) % 2000 == 0:
-            print(f"    Iter {it+1}/{n_iter}, Loss: {loss_total.item():.4f}")
+            print(f"Selected {len(indices)} samples ({ipc} per class)")
+            
+            # HL evaluation
+            print(f"\n--- HL Evaluation ---")
+            hl_mean, hl_std, hl_accs = evaluate_multiple_runs(
+                subset_images, subset_labels, test_images, test_labels,
+                mode='hl', num_runs=num_runs, device=device
+            )
+            print(f"HL: {hl_mean:.2f} ± {hl_std:.2f}")
+            
+            # SL evaluation
+            print(f"\n--- SL Evaluation ---")
+            sl_mean, sl_std, sl_accs = evaluate_multiple_runs(
+                subset_images, subset_soft_labels, test_images, test_labels,
+                mode='sl', num_runs=num_runs, device=device
+            )
+            print(f"SL: {sl_mean:.2f} ± {sl_std:.2f}")
+            
+            key = f"{method}_ipc{ipc}"
+            results[key] = {
+                'method': method,
+                'ipc': ipc,
+                'hl_mean': hl_mean,
+                'hl_std': hl_std,
+                'hl_accs': hl_accs,
+                'sl_mean': sl_mean,
+                'sl_std': sl_std,
+                'sl_accs': sl_accs,
+            }
+            
+            # Save intermediate results
+            with open('/workspace/results/results_final_clean.json', 'w') as f:
+                json.dump(results, f, indent=2)
     
-    return syn_images.detach().cpu(), syn_labels.cpu()
+    return results
 
 
-def distill_dc(train_images, train_labels, ipc, outer_loops=50, inner_loops=50, lr_img=1.0):
-    """Dataset Condensation via gradient matching."""
-    print(f"  DC distillation: ipc={ipc}, outer={outer_loops}, inner={inner_loops}")
+def distill_dm(train_images, train_labels, ipc, num_classes=100, 
+               device='cuda', iterations=20000, lr=0.01, seed=0):
+    """Distribution Matching (DM) distillation."""
+    from dsa import DiffAugment
     
-    syn_images = []
-    syn_labels = []
-    for c in range(NUM_CLASSES):
-        cls_idx = (train_labels == c).nonzero(as_tuple=True)[0]
-        perm = torch.randperm(len(cls_idx))[:ipc]
-        syn_images.append(train_images[cls_idx[perm]].clone())
-        syn_labels.extend([c] * ipc)
-    
-    syn_images = torch.cat(syn_images, dim=0).to(DEVICE).requires_grad_(True)
-    syn_labels = torch.tensor(syn_labels, device=DEVICE)
-    train_images_gpu = train_images.to(DEVICE)
-    train_labels_gpu = train_labels.to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
-    
-    optimizer = torch.optim.SGD([syn_images], lr=lr_img, momentum=0.5)
-    
-    for outer in range(outer_loops):
-        model = ConvNet(num_classes=NUM_CLASSES, channel=3, im_size=(32, 32)).to(DEVICE)
-        model.train()
-        
-        for inner in range(inner_loops):
-            # Gradient on real data
-            real_idx = torch.randperm(len(train_images_gpu))[:256]
-            real_batch = DiffAugment(train_images_gpu[real_idx], strategy='color_crop_cutout_flip_scale_rotate')
-            real_labels = train_labels_gpu[real_idx]
-            
-            loss_real = criterion(model(real_batch), real_labels)
-            grad_real = torch.autograd.grad(loss_real, model.parameters(), create_graph=False)
-            
-            # Gradient on synthetic data
-            syn_aug = DiffAugment(syn_images, strategy='color_crop_cutout_flip_scale_rotate')
-            loss_syn = criterion(model(syn_aug), syn_labels)
-            grad_syn = torch.autograd.grad(loss_syn, model.parameters(), create_graph=True)
-            
-            # Match gradients
-            loss_match = sum(((gs - gr.detach()) ** 2).sum() / (gr.detach() ** 2).sum().clamp(min=1e-8)
-                           for gs, gr in zip(grad_syn, grad_real))
-            
-            optimizer.zero_grad()
-            loss_match.backward()
-            optimizer.step()
-            
-            # Update model with synthetic gradient (no graph)
-            with torch.no_grad():
-                for p, g in zip(model.parameters(), grad_syn):
-                    p.sub_(0.01 * g.detach())
-        
-        if (outer + 1) % 10 == 0:
-            print(f"    Outer {outer+1}/{outer_loops}")
-    
-    return syn_images.detach().cpu(), syn_labels.cpu()
-
-
-def distill_tm(train_images, train_labels, ipc, n_iter=3000, lr_img=1000.0, n_experts=3, expert_epochs=30):
-    """Trajectory Matching distillation."""
-    print(f"  TM distillation: ipc={ipc}, iter={n_iter}, experts={n_experts}")
-    
-    train_images_gpu = train_images.to(DEVICE)
-    train_labels_gpu = train_labels.to(DEVICE)
-    
-    # Train expert trajectories
-    print("    Training expert trajectories...")
-    expert_trajectories = []
-    for exp_id in range(n_experts):
-        model = ConvNet(num_classes=NUM_CLASSES, channel=3, im_size=(32, 32)).to(DEVICE)
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-        criterion = nn.CrossEntropyLoss()
-        
-        trajectory = [{ k: v.cpu().clone() for k, v in model.state_dict().items() }]
-        
-        for ep in range(expert_epochs):
-            model.train()
-            perm = torch.randperm(len(train_images_gpu), device=DEVICE)
-            for i in range(0, len(train_images_gpu), 256):
-                idx = perm[i:i+256]
-                imgs = DiffAugment(train_images_gpu[idx], strategy='color_crop_cutout_flip_scale_rotate')
-                loss = criterion(model(imgs), train_labels_gpu[idx])
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-            trajectory.append({ k: v.cpu().clone() for k, v in model.state_dict().items() })
-        
-        expert_trajectories.append(trajectory)
-        print(f"    Expert {exp_id+1}/{n_experts} trained ({expert_epochs} epochs)")
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     
     # Initialize synthetic data
-    syn_images = []
-    syn_labels = []
-    for c in range(NUM_CLASSES):
-        cls_idx = (train_labels == c).nonzero(as_tuple=True)[0]
-        perm = torch.randperm(len(cls_idx))[:ipc]
-        syn_images.append(train_images[cls_idx[perm]].clone())
-        syn_labels.extend([c] * ipc)
+    syn_images = torch.randn(num_classes * ipc, 3, 32, 32, device=device, requires_grad=True)
+    syn_labels = torch.arange(num_classes, device=device).repeat_interleave(ipc)
     
-    syn_images = torch.cat(syn_images, dim=0).to(DEVICE).requires_grad_(True)
-    syn_labels = torch.tensor(syn_labels, device=DEVICE)
+    # Initialize from class means
+    class_indices = get_class_indices(train_labels, num_classes)
+    with torch.no_grad():
+        for c in range(num_classes):
+            idx = class_indices[c]
+            # Random subset for initialization
+            chosen = np.random.choice(idx, size=min(ipc, len(idx)), replace=False)
+            syn_images[c*ipc:(c+1)*ipc] = train_images[chosen].to(device)
     
-    optimizer = torch.optim.SGD([syn_images], lr=lr_img, momentum=0.5)
-    criterion = nn.CrossEntropyLoss()
+    syn_images = syn_images.detach().requires_grad_(True)
+    optimizer = torch.optim.SGD([syn_images], lr=lr, momentum=0.5)
     
-    max_start_epoch = expert_epochs - 2  # Leave room for target
+    train_images_gpu = train_images.to(device)
+    train_labels_gpu = train_labels.to(device)
     
-    for it in range(n_iter):
-        # Pick random expert and starting point
-        exp_idx = np.random.randint(n_experts)
-        start_epoch = np.random.randint(0, max(1, max_start_epoch))
+    for it in range(iterations):
+        # Random model for feature extraction
+        model = get_convnet_d3().to(device)
+        model.eval()
         
-        # Load starting params
-        start_params = expert_trajectories[exp_idx][start_epoch]
-        target_params = expert_trajectories[exp_idx][min(start_epoch + 2, expert_epochs)]
+        loss = torch.tensor(0.0, device=device)
         
-        # Create student model at start point
-        student = ConvNet(num_classes=NUM_CLASSES, channel=3, im_size=(32, 32)).to(DEVICE)
-        student.load_state_dict({k: v.to(DEVICE) for k, v in start_params.items()})
-        student.train()
-        
-        # Train student on synthetic data for a few steps
-        student_opt = torch.optim.SGD(student.parameters(), lr=0.01, momentum=0.9)
-        
-        for _ in range(10):  # inner steps
-            syn_aug = DiffAugment(syn_images, strategy='color_crop_cutout_flip_scale_rotate')
-            loss_s = criterion(student(syn_aug), syn_labels)
-            student_opt.zero_grad()
-            loss_s.backward()
-            student_opt.step()
-        
-        # Compare student params to target trajectory
-        loss_match = 0
-        target_flat = torch.cat([v.to(DEVICE).reshape(-1) for v in target_params.values()])
-        student_flat = torch.cat([p.reshape(-1) for p in student.parameters()])
-        start_flat = torch.cat([v.to(DEVICE).reshape(-1) for v in start_params.values()])
-        
-        target_direction = target_flat - start_flat
-        student_direction = student_flat - start_flat
-        
-        loss_match = 1 - F.cosine_similarity(student_direction.unsqueeze(0), 
-                                               target_direction.unsqueeze(0).detach())
+        for c in range(num_classes):
+            # Real images for this class
+            real_idx = (train_labels_gpu == c).nonzero(as_tuple=True)[0]
+            real_batch_idx = real_idx[torch.randperm(len(real_idx), device=device)[:256]]
+            real_batch = train_images_gpu[real_batch_idx]
+            
+            # Synthetic images for this class
+            syn_batch = syn_images[c*ipc:(c+1)*ipc]
+            
+            # Apply DSA
+            seed_aug = int(torch.randint(0, 100000, (1,)).item())
+            real_aug = DiffAugment(real_batch, strategy='color_crop_cutout_flip_scale_rotate', seed=seed_aug)
+            syn_aug = DiffAugment(syn_batch, strategy='color_crop_cutout_flip_scale_rotate', seed=seed_aug)
+            
+            with torch.no_grad():
+                real_feat = model.embed(real_aug)
+                real_mean = real_feat.mean(0)
+            
+            syn_feat = model.embed(syn_aug)
+            syn_mean = syn_feat.mean(0)
+            
+            loss += torch.sum((real_mean - syn_mean) ** 2)
         
         optimizer.zero_grad()
-        loss_match.backward()
+        loss.backward()
         optimizer.step()
         
         if (it + 1) % 1000 == 0:
-            print(f"    Iter {it+1}/{n_iter}, Loss: {loss_match.item():.4f}")
+            print(f"  DM iter {it+1}/{iterations}, loss: {loss.item():.4f}")
     
     return syn_images.detach().cpu(), syn_labels.cpu()
 
 
-def main():
-    """Run all experiments."""
-    # Check for resume
-    results_file = '/workspace/results/results_final.json'
-    if os.path.exists(results_file):
-        with open(results_file) as f:
-            results = json.load(f)
-        print(f"Resuming with {len(results)} existing results")
-    else:
-        results = {}
+def distill_dc(train_images, train_labels, ipc, num_classes=100,
+               device='cuda', iterations=5000, lr_img=1.0, lr_net=0.01, seed=0):
+    """Dataset Condensation (DC) via gradient matching."""
+    from dsa import DiffAugment
     
-    print("Loading CIFAR-100...")
-    train_images, train_labels, test_images, test_labels = get_cifar100_tensors()
+    torch.manual_seed(seed)
+    np.random.seed(seed)
     
-    # Move test data to GPU permanently
-    test_imgs_gpu = test_images.to(DEVICE)
-    test_labels_gpu = test_labels.to(DEVICE)
+    # Initialize synthetic data from class means
+    syn_images = torch.randn(num_classes * ipc, 3, 32, 32, device=device)
+    syn_labels = torch.arange(num_classes, device=device).repeat_interleave(ipc)
     
-    # Load teacher for K-centers feature extraction
-    teacher_data = torch.load('/workspace/teacher_final.pt', map_location='cpu')
-    teacher = ConvNet(num_classes=NUM_CLASSES, channel=3, im_size=(32, 32))
-    teacher.load_state_dict(teacher_data['state_dict'])
-    teacher = teacher.to(DEVICE)
-    teacher.eval()
-    print(f"Teacher accuracy: {teacher_data['accuracy']:.2f}%")
+    class_indices = get_class_indices(train_labels, num_classes)
+    with torch.no_grad():
+        for c in range(num_classes):
+            idx = class_indices[c]
+            chosen = np.random.choice(idx, size=min(ipc, len(idx)), replace=False)
+            syn_images[c*ipc:(c+1)*ipc] = train_images[chosen].to(device)
     
-    # Load soft labels
-    full_soft_labels = torch.load('/workspace/soft_labels_final.pt', map_location='cpu')
+    syn_images = syn_images.detach().requires_grad_(True)
+    optimizer_img = torch.optim.SGD([syn_images], lr=lr_img, momentum=0.5)
     
-    configs = []
-    for ipc in [10, 50]:
-        for method in ['random', 'k_centers', 'dm', 'dc', 'tm']:
-            for label_type in ['hard', 'soft']:
-                key = f"{method}_ipc{ipc}_{label_type}"
-                if key not in results:
-                    configs.append((method, ipc, label_type, key))
+    train_images_gpu = train_images.to(device)
+    train_labels_gpu = train_labels.to(device)
     
-    print(f"\n{len(configs)} experiments remaining out of 20 total")
-    
-    # Cache distilled datasets
-    distilled_cache = {}
-    
-    for cfg_idx, (method, ipc, label_type, key) in enumerate(configs):
-        print(f"\n{'='*60}")
-        print(f"[{cfg_idx+1}/{len(configs)}] {key}")
-        print(f"{'='*60}")
+    for it in range(iterations):
+        # New random model each iteration
+        model = get_convnet_d3().to(device)
+        model.train()
         
-        t0 = time.time()
+        # Inner loop: train model on synthetic data for a few steps
+        optimizer_net = torch.optim.SGD(model.parameters(), lr=lr_net, momentum=0.9)
         
-        # Get or create the dataset
-        cache_key = f"{method}_ipc{ipc}"
+        loss_total = torch.tensor(0.0, device=device)
         
-        if cache_key in distilled_cache:
-            sub_images, sub_labels = distilled_cache[cache_key]
-        elif method == 'random':
-            selected = random_select(train_labels, ipc, seed=42)
-            sub_images = train_images[selected]
-            sub_labels = train_labels[selected]
-            distilled_cache[cache_key] = (sub_images, sub_labels)
-        elif method == 'k_centers':
-            selected = k_centers_select(train_images, train_labels, ipc, teacher_model=teacher, seed=42)
-            sub_images = train_images[selected]
-            sub_labels = train_labels[selected]
-            distilled_cache[cache_key] = (sub_images, sub_labels)
-        elif method == 'dm':
-            # Check if previously distilled
-            dm_path = f'/workspace/distilled_v2_dm_ipc{ipc}.pt'
-            if os.path.exists(dm_path):
-                data = torch.load(dm_path, map_location='cpu')
-                sub_images, sub_labels = data['images'], data['labels']
-            else:
-                n_iter = 15000 if ipc == 10 else 10000
-                sub_images, sub_labels = distill_dm(train_images, train_labels, ipc, n_iter=n_iter)
-                torch.save({'images': sub_images, 'labels': sub_labels}, dm_path)
-            distilled_cache[cache_key] = (sub_images, sub_labels)
-        elif method == 'dc':
-            dc_path = f'/workspace/distilled_v2_dc_ipc{ipc}.pt'
-            if os.path.exists(dc_path):
-                data = torch.load(dc_path, map_location='cpu')
-                sub_images, sub_labels = data['images'], data['labels']
-            else:
-                outer = 40 if ipc == 10 else 30
-                inner = 40 if ipc == 10 else 30
-                sub_images, sub_labels = distill_dc(train_images, train_labels, ipc, 
-                                                     outer_loops=outer, inner_loops=inner)
-                torch.save({'images': sub_images, 'labels': sub_labels}, dc_path)
-            distilled_cache[cache_key] = (sub_images, sub_labels)
-        elif method == 'tm':
-            tm_path = f'/workspace/distilled_v2_tm_ipc{ipc}.pt'
-            if os.path.exists(tm_path):
-                data = torch.load(tm_path, map_location='cpu')
-                sub_images, sub_labels = data['images'], data['labels']
-            else:
-                sub_images, sub_labels = distill_tm(train_images, train_labels, ipc,
-                                                     n_iter=3000, n_experts=5, expert_epochs=40)
-                torch.save({'images': sub_images, 'labels': sub_labels}, tm_path)
-            distilled_cache[cache_key] = (sub_images, sub_labels)
+        for c in range(num_classes):
+            # Real gradient
+            real_idx = (train_labels_gpu == c).nonzero(as_tuple=True)[0]
+            real_batch_idx = real_idx[torch.randperm(len(real_idx), device=device)[:256]]
+            real_batch = train_images_gpu[real_batch_idx]
+            real_labels_batch = train_labels_gpu[real_batch_idx]
+            
+            seed_aug = int(torch.randint(0, 100000, (1,)).item())
+            real_aug = DiffAugment(real_batch, strategy='color_crop_cutout_flip_scale_rotate', seed=seed_aug)
+            
+            real_out = model(real_aug)
+            real_loss = F.cross_entropy(real_out, real_labels_batch)
+            real_grads = torch.autograd.grad(real_loss, model.parameters(), create_graph=False)
+            
+            # Synthetic gradient
+            syn_batch = syn_images[c*ipc:(c+1)*ipc]
+            syn_labels_batch = syn_labels[c*ipc:(c+1)*ipc]
+            
+            syn_aug = DiffAugment(syn_batch, strategy='color_crop_cutout_flip_scale_rotate', seed=seed_aug)
+            
+            syn_out = model(syn_aug)
+            syn_loss = F.cross_entropy(syn_out, syn_labels_batch)
+            syn_grads = torch.autograd.grad(syn_loss, model.parameters(), create_graph=True)
+            
+            # Gradient matching loss (cosine distance)
+            for rg, sg in zip(real_grads, syn_grads):
+                rg_flat = rg.flatten()
+                sg_flat = sg.flatten()
+                cos_sim = F.cosine_similarity(rg_flat.unsqueeze(0), sg_flat.unsqueeze(0))
+                loss_total += (1 - cos_sim)
         
-        # Get soft labels for this subset
-        if method in ['random', 'k_centers']:
-            # These are real images - use pre-computed soft labels
-            selected = [i for i in range(len(train_images)) if any(
-                torch.equal(train_images[i], sub_images[j]) for j in range(min(3, len(sub_images)))
-            )]
-            # Actually, re-select to get indices
-            if method == 'random':
-                selected = random_select(train_labels, ipc, seed=42)
+        optimizer_img.zero_grad()
+        loss_total.backward()
+        optimizer_img.step()
+        
+        if (it + 1) % 500 == 0:
+            print(f"  DC iter {it+1}/{iterations}, loss: {loss_total.item():.4f}")
+    
+    return syn_images.detach().cpu(), syn_labels.cpu()
+
+
+def distill_tm(train_images, train_labels, ipc, num_classes=100,
+               device='cuda', iterations=5000, lr_img=0.01, seed=0,
+               expert_dir='/workspace/expert_trajectories'):
+    """Trajectory Matching (TM) distillation."""
+    from dsa import DiffAugment
+    
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
+    # Load or generate expert trajectories
+    expert_files = sorted([f for f in os.listdir(expert_dir) if f.endswith('.pt')])
+    if not expert_files:
+        print("No expert trajectories found! Generating...")
+        generate_expert_trajectories(train_images, train_labels, expert_dir, device=device)
+        expert_files = sorted([f for f in os.listdir(expert_dir) if f.endswith('.pt')])
+    
+    print(f"Loading {len(expert_files)} expert trajectories...")
+    expert_trajectories = []
+    for f in expert_files:
+        traj = torch.load(os.path.join(expert_dir, f), map_location='cpu', weights_only=True)
+        expert_trajectories.append(traj)
+    
+    # Initialize synthetic data
+    syn_images = torch.randn(num_classes * ipc, 3, 32, 32, device=device)
+    syn_labels = torch.arange(num_classes, device=device).repeat_interleave(ipc)
+    
+    class_indices = get_class_indices(train_labels, num_classes)
+    with torch.no_grad():
+        for c in range(num_classes):
+            idx = class_indices[c]
+            chosen = np.random.choice(idx, size=min(ipc, len(idx)), replace=False)
+            syn_images[c*ipc:(c+1)*ipc] = train_images[chosen].to(device)
+    
+    syn_images = syn_images.detach().requires_grad_(True)
+    optimizer = torch.optim.SGD([syn_images], lr=lr_img, momentum=0.5)
+    
+    max_start_epoch = 25  # Sample starting point from first 25 epochs
+    syn_steps = 30  # Number of student steps to match
+    expert_epochs = 2  # Number of expert epochs to match
+    lr_student = 0.01
+    
+    for it in range(iterations):
+        # Sample random expert trajectory and starting point
+        traj_idx = np.random.randint(len(expert_trajectories))
+        traj = expert_trajectories[traj_idx]
+        
+        n_epochs = len(traj)
+        start_epoch = np.random.randint(0, min(max_start_epoch, n_epochs - expert_epochs))
+        
+        # Get expert start and target parameters
+        expert_start = traj[start_epoch]
+        expert_target = traj[min(start_epoch + expert_epochs, n_epochs - 1)]
+        
+        # Initialize student from expert start
+        student = get_convnet_d3().to(device)
+        student_params = {k: v.to(device) for k, v in expert_start.items()}
+        student.load_state_dict(student_params)
+        student.train()
+        
+        student_opt = torch.optim.SGD(student.parameters(), lr=lr_student, momentum=0.9)
+        
+        # Train student on synthetic data for syn_steps
+        for step in range(syn_steps):
+            # Random batch from synthetic data
+            perm = torch.randperm(len(syn_images), device=device)[:256]
+            batch_imgs = syn_images[perm]
+            batch_labels = syn_labels[perm]
+            
+            seed_aug = int(torch.randint(0, 100000, (1,)).item())
+            batch_imgs = DiffAugment(batch_imgs, strategy='color_crop_cutout_flip_scale_rotate', seed=seed_aug)
+            
+            student_opt.zero_grad()
+            out = student(batch_imgs)
+            loss = F.cross_entropy(out, batch_labels)
+            loss.backward()
+            student_opt.step()
+        
+        # Compute trajectory matching loss
+        target_params = {k: v.to(device) for k, v in expert_target.items()}
+        
+        tm_loss = torch.tensor(0.0, device=device)
+        n_params = 0
+        for (name, student_p), (_, target_p) in zip(student.named_parameters(), target_params.items()):
+            if name in target_params:
+                tm_loss += F.mse_loss(student_p, target_params[name], reduction='sum')
+                n_params += student_p.numel()
+        
+        # Normalize
+        tm_loss = tm_loss / n_params
+        
+        optimizer.zero_grad()
+        tm_loss.backward()
+        optimizer.step()
+        
+        if (it + 1) % 500 == 0:
+            print(f"  TM iter {it+1}/{iterations}, loss: {tm_loss.item():.6f}")
+    
+    return syn_images.detach().cpu(), syn_labels.cpu()
+
+
+def generate_expert_trajectories(train_images, train_labels, save_dir, 
+                                  device='cuda', num_experts=10, epochs=50):
+    """Generate expert trajectories for TM."""
+    from dsa import DiffAugment
+    
+    os.makedirs(save_dir, exist_ok=True)
+    
+    train_images_gpu = train_images.to(device)
+    train_labels_gpu = train_labels.to(device)
+    n = len(train_images_gpu)
+    
+    for exp_idx in range(num_experts):
+        print(f"Training expert {exp_idx+1}/{num_experts}...")
+        torch.manual_seed(exp_idx * 100)
+        
+        model = get_convnet_d3().to(device)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+        
+        trajectory = []
+        trajectory.append({k: v.cpu().clone() for k, v in model.state_dict().items()})
+        
+        for epoch in range(epochs):
+            model.train()
+            perm = torch.randperm(n, device=device)
+            
+            for i in range(0, n, 256):
+                idx = perm[i:i+256]
+                batch_imgs = train_images_gpu[idx]
+                batch_labels = train_labels_gpu[idx]
+                
+                batch_imgs = DiffAugment(batch_imgs, strategy='color_crop_cutout_flip_scale_rotate')
+                
+                optimizer.zero_grad()
+                out = model(batch_imgs)
+                loss = F.cross_entropy(out, batch_labels)
+                loss.backward()
+                optimizer.step()
+            
+            trajectory.append({k: v.cpu().clone() for k, v in model.state_dict().items()})
+        
+        torch.save(trajectory, os.path.join(save_dir, f'expert_{exp_idx}.pt'))
+        print(f"  Expert {exp_idx+1} saved ({len(trajectory)} checkpoints)")
+
+
+def run_dd_experiments(train_images, train_labels, test_images, test_labels,
+                       soft_labels_all, device='cuda', num_runs=3):
+    """Run DD method experiments."""
+    results = {}
+    
+    for method in ['dm', 'dc', 'tm']:
+        for ipc in [10, 50]:
+            print(f"\n{'='*60}")
+            print(f"DD Method: {method.upper()}, IPC={ipc}")
+            print(f"{'='*60}")
+            
+            # Check for existing distilled data
+            distilled_path = f'/workspace/distilled_{method}_ipc{ipc}_final.pt'
+            
+            if os.path.exists(distilled_path):
+                print(f"Loading existing distilled data from {distilled_path}")
+                data = torch.load(distilled_path, map_location='cpu', weights_only=True)
+                syn_images = data['images']
+                syn_labels = data['labels']
             else:
-                selected = k_centers_select(train_images, train_labels, ipc, teacher_model=teacher, seed=42)
-            sub_sl = full_soft_labels[selected]
-        else:
-            # For distilled images, generate soft labels from teacher
+                # Distill
+                if method == 'dm':
+                    iters = 20000 if ipc == 10 else 10000
+                    syn_images, syn_labels = distill_dm(
+                        train_images, train_labels, ipc, 
+                        iterations=iters, device=device
+                    )
+                elif method == 'dc':
+                    iters = 5000 if ipc == 10 else 3000
+                    syn_images, syn_labels = distill_dc(
+                        train_images, train_labels, ipc,
+                        iterations=iters, device=device
+                    )
+                elif method == 'tm':
+                    iters = 5000 if ipc == 10 else 3000
+                    syn_images, syn_labels = distill_tm(
+                        train_images, train_labels, ipc,
+                        iterations=iters, device=device
+                    )
+                
+                # Save
+                torch.save({'images': syn_images, 'labels': syn_labels}, distilled_path)
+                print(f"Saved distilled data to {distilled_path}")
+            
+            # Generate soft labels for synthetic data using teacher
+            # For DD methods, we need to generate soft labels from the teacher
+            teacher_path = '/workspace/teacher_model.pt'
+            teacher = get_convnet_d3().to(device)
+            teacher.load_state_dict(torch.load(teacher_path, map_location=device, weights_only=True))
             teacher.eval()
+            
             with torch.no_grad():
-                sub_sl_list = []
-                for i in range(0, len(sub_images), 256):
-                    batch = sub_images[i:i+256].to(DEVICE)
-                    logits = teacher(batch)
-                    sub_sl_list.append(logits.cpu())
-                sub_sl = torch.cat(sub_sl_list, dim=0)
-        
-        # Run trials
-        sl_arg = sub_sl if label_type == 'soft' else None
-        mean, std, accs = run_trials(sub_images, sub_labels, test_imgs_gpu, test_labels_gpu,
-                                      label_type=label_type, soft_labels=sl_arg, num_trials=3)
-        
-        elapsed = time.time() - t0
-        results[key] = {
-            'method': method, 'ipc': ipc, 'label_type': label_type,
-            'mean': mean, 'std': std, 'accs': accs, 'time': elapsed
-        }
-        
-        # Save after each experiment
-        os.makedirs('/workspace/results', exist_ok=True)
-        with open(results_file, 'w') as f:
-            json.dump(results, f, indent=2)
-        print(f"  Saved. Time: {elapsed:.0f}s")
+                syn_soft_labels = teacher(syn_images.to(device)).cpu()
+            
+            # HL evaluation
+            print(f"\n--- HL Evaluation ---")
+            hl_mean, hl_std, hl_accs = evaluate_multiple_runs(
+                syn_images, syn_labels, test_images, test_labels,
+                mode='hl', num_runs=num_runs, device=device
+            )
+            print(f"HL: {hl_mean:.2f} ± {hl_std:.2f}")
+            
+            # SL evaluation
+            print(f"\n--- SL Evaluation ---")
+            sl_mean, sl_std, sl_accs = evaluate_multiple_runs(
+                syn_images, syn_soft_labels, test_images, test_labels,
+                mode='sl', num_runs=num_runs, device=device
+            )
+            print(f"SL: {sl_mean:.2f} ± {sl_std:.2f}")
+            
+            key = f"{method}_ipc{ipc}"
+            results[key] = {
+                'method': method,
+                'ipc': ipc,
+                'hl_mean': hl_mean,
+                'hl_std': hl_std,
+                'hl_accs': hl_accs,
+                'sl_mean': sl_mean,
+                'sl_std': sl_std,
+                'sl_accs': sl_accs,
+            }
+            
+            # Save intermediate
+            with open('/workspace/results/results_dd_final.json', 'w') as f:
+                json.dump(results, f, indent=2)
     
-    # Print final table
-    print("\n\n" + "="*80)
-    print("FINAL RESULTS TABLE")
+    return results
+
+
+def print_results_table(results):
+    """Print results in paper format."""
+    print("\n" + "="*80)
+    print("Table: Small-scale DD methods on CIFAR-100 (ConvNet-D3)")
     print("="*80)
+    print(f"{'Method':<15} {'IPC':>5} {'HL (ours)':>15} {'HL (paper)':>15} {'SL (ours)':>15} {'SL (paper)':>15}")
+    print("-"*80)
     
-    paper_values = {
-        'dm_ipc10_hard': 29.23, 'dm_ipc10_soft': 26.13,
-        'dm_ipc50_hard': 42.32, 'dm_ipc50_soft': 43.46,
-        'dc_ipc10_hard': 28.42, 'dc_ipc10_soft': 23.54,
-        'dc_ipc50_hard': 30.56, 'dc_ipc50_soft': 33.46,
-        'tm_ipc10_hard': 38.18, 'tm_ipc10_soft': 37.60,
-        'tm_ipc50_hard': 46.32, 'tm_ipc50_soft': 46.26,
-        'random_ipc10_hard': 18.64, 'random_ipc10_soft': 33.43,
-        'random_ipc50_hard': 34.66, 'random_ipc50_soft': 45.39,
-        'k_centers_ipc10_hard': 25.04, 'k_centers_ipc10_soft': 34.70,
-        'k_centers_ipc50_hard': 38.64, 'k_centers_ipc50_soft': 46.24,
+    paper_results = {
+        'dm_ipc10': {'hl': 29.23, 'sl': 26.13},
+        'dm_ipc50': {'hl': 42.32, 'sl': 43.46},
+        'dc_ipc10': {'hl': 28.42, 'sl': 23.54},
+        'dc_ipc50': {'hl': 30.56, 'sl': 33.46},
+        'tm_ipc10': {'hl': 38.18, 'sl': 37.60},
+        'tm_ipc50': {'hl': 46.32, 'sl': 46.26},
+        'random_ipc10': {'hl': 18.64, 'sl': 33.43},
+        'random_ipc50': {'hl': 34.66, 'sl': 45.39},
+        'k_centers_ipc10': {'hl': 25.04, 'sl': 34.70},
+        'k_centers_ipc50': {'hl': 38.64, 'sl': 46.24},
     }
     
-    print(f"{'Method':<12} {'IPC':>4} {'Label':>6} {'Ours':>12} {'Paper':>8} {'Diff':>8}")
-    print("-" * 55)
+    for key in ['dm_ipc10', 'dm_ipc50', 'dc_ipc10', 'dc_ipc50', 'tm_ipc10', 'tm_ipc50',
+                'random_ipc10', 'random_ipc50', 'k_centers_ipc10', 'k_centers_ipc50']:
+        if key in results:
+            r = results[key]
+            p = paper_results.get(key, {'hl': 0, 'sl': 0})
+            method_name = key.split('_ipc')[0].upper().replace('_', '-')
+            ipc = key.split('ipc')[1]
+            print(f"{method_name:<15} {ipc:>5} {r['hl_mean']:>7.2f}±{r['hl_std']:.2f} {p['hl']:>7.2f} {r['sl_mean']:>7.2f}±{r['sl_std']:.2f} {p['sl']:>7.2f}")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--phase', type=str, default='all', choices=['coreset', 'dd', 'all'])
+    parser.add_argument('--num_runs', type=int, default=3)
+    parser.add_argument('--device', type=str, default='cuda')
+    args = parser.parse_args()
     
-    for ipc in [10, 50]:
-        for method in ['random', 'k_centers', 'dc', 'dm', 'tm']:
-            for label_type in ['hard', 'soft']:
-                key = f"{method}_ipc{ipc}_{label_type}"
-                if key in results:
-                    r = results[key]
-                    paper_val = paper_values.get(key, 0)
-                    lt = 'HL' if label_type == 'hard' else 'SL'
-                    diff = r['mean'] - paper_val
-                    print(f"{method:<12} {ipc:>4} {lt:>6} {r['mean']:>6.2f}±{r['std']:.2f} {paper_val:>8.2f} {diff:>+8.2f}")
-        print()
+    os.makedirs('/workspace/results', exist_ok=True)
     
-    # Save table to file
-    with open('/workspace/results/table_final.txt', 'w') as f:
-        f.write(f"{'Method':<12} {'IPC':>4} {'Label':>6} {'Ours':>12} {'Paper':>8} {'Diff':>8}\n")
-        f.write("-" * 55 + "\n")
-        for ipc in [10, 50]:
-            for method in ['random', 'k_centers', 'dc', 'dm', 'tm']:
-                for label_type in ['hard', 'soft']:
-                    key = f"{method}_ipc{ipc}_{label_type}"
-                    if key in results:
-                        r = results[key]
-                        paper_val = paper_values.get(key, 0)
-                        lt = 'HL' if label_type == 'hard' else 'SL'
-                        diff = r['mean'] - paper_val
-                        f.write(f"{method:<12} {ipc:>4} {lt:>6} {r['mean']:>6.2f}±{r['std']:.2f} {paper_val:>8.2f} {diff:>+8.2f}\n")
-            f.write("\n")
+    # Load data
+    print("Loading CIFAR-100...")
+    train_images, train_labels, test_images, test_labels = get_cifar100_tensors()
+    print(f"Train: {train_images.shape}, Test: {test_images.shape}")
     
-    print("\nResults saved to /workspace/results/results_final.json")
-    print("Table saved to /workspace/results/table_final.txt")
+    # Train teacher and generate soft labels
+    teacher = train_teacher(train_images, train_labels, device=args.device)
+    soft_labels = generate_teacher_soft_labels(teacher, train_images, device=args.device)
+    
+    all_results = {}
+    
+    if args.phase in ['coreset', 'all']:
+        coreset_results = run_coreset_experiments(
+            train_images, train_labels, test_images, test_labels,
+            teacher, soft_labels, device=args.device, num_runs=args.num_runs
+        )
+        all_results.update(coreset_results)
+    
+    if args.phase in ['dd', 'all']:
+        dd_results = run_dd_experiments(
+            train_images, train_labels, test_images, test_labels,
+            soft_labels, device=args.device, num_runs=args.num_runs
+        )
+        all_results.update(dd_results)
+    
+    # Save all results
+    with open('/workspace/results/results_all_final.json', 'w') as f:
+        json.dump(all_results, f, indent=2)
+    
+    print_results_table(all_results)
 
 
 if __name__ == '__main__':
