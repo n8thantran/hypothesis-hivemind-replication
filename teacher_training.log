@@ -22,3 +22,4 @@ Epoch 1200/2000 | Train: 62.73% | Test: 53.07% | LR: 0.034549
   -> New best: 53.07%
 Epoch 1300/2000 | Train: 64.76% | Test: 54.48% | LR: 0.027300
   -> New best: 54.48%
+Epoch 1400/2000 | Train: 67.26% | Test: 53.98% | LR: 0.020611
