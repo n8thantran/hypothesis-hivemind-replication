@@ -15,3 +15,10 @@ Epoch 600/2000 | Train: 54.46% | Test: 49.62% | LR: 0.079389
 Epoch 700/2000 | Train: 55.31% | Test: 47.99% | LR: 0.072700
 Epoch 800/2000 | Train: 56.22% | Test: 49.61% | LR: 0.065451
 Epoch 900/2000 | Train: 57.83% | Test: 50.05% | LR: 0.057822
+Epoch 1000/2000 | Train: 59.06% | Test: 52.23% | LR: 0.050000
+  -> New best: 52.23%
+Epoch 1100/2000 | Train: 60.54% | Test: 52.18% | LR: 0.042178
+Epoch 1200/2000 | Train: 62.73% | Test: 53.07% | LR: 0.034549
+  -> New best: 53.07%
+Epoch 1300/2000 | Train: 64.76% | Test: 54.48% | LR: 0.027300
+  -> New best: 54.48%

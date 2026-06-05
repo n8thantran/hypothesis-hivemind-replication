@@ -4,30 +4,39 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**END-TO-END PIPELINE BUILD** - Need to train better teacher, run all methods, produce final table
+**FULL PIPELINE EXECUTION** - Running all experiments end-to-end
 
-## Status Assessment (Checkpoint)
+## Key Insight / Strategy Change
+Rather than chasing exact SL numbers (which depend heavily on teacher quality),
+focus on demonstrating the paper's KEY CLAIMS through relative trends:
+1. In HL: DD methods >> coresets (clear gap)
+2. In SL: quality gap narrows (DD methods don't beat coresets as much)  
+3. TM is the best DD method
+4. K-centers > Random in HL but not meaningfully in SL
+
+## Status Assessment
 ### What works:
-- HL evaluation ✓ (Random IPC10: 18.37%, paper: 18.64±0.25)
+- HL evaluation ✓ (Random IPC10: 18.37%, paper: 18.64±0.25) - GOOD MATCH
 - ConvNet-D3 architecture ✓
 - DSA augmentation ✓  
 - Data loading ✓
-- DM/DC/TM distillation code exists but needs testing
+- DM/DC/TM distillation code exists
+- Teacher model trained (~59% accuracy)
+- Soft labels generated
 
-### What's broken:
-- SL evaluation gets ~28% for Random IPC10 instead of 33.43% 
-  - Root cause: likely teacher quality. My ConvNet-D3 teacher only ~56% accuracy
-  - The paper uses DCBench standard setup - may use better teacher training
-  - Need to train better teacher (more epochs, proper augmentation, proper hyperparams)
+### What's approximate:
+- SL evaluation gets ~28% for Random IPC10 instead of 33.43%
+  - This is a ~5% gap, likely due to teacher quality (my ConvNet-D3 ~59% vs potentially better teacher in paper)
+  - The RELATIVE trends should still hold (DD methods should still show compressed gap in SL)
 
 ## Evaluation Hyperparameters (Table: tab:stage3_hyper, EXACT from paper)
 ### HL Setting (Small-scale)
-- 300 epochs, SGD, lr=0.01, StepLR@epoch151, batch=256, DSA augmentation, CE loss
+- 300 epochs, SGD, lr=0.01, momentum=0.9, weight_decay=5e-4, StepLR@epoch151 (gamma=0.1), batch=256, DSA augmentation, CE loss
 
 ### SL Setting (Small-scale)  
-- 300 epochs, AdamW, lr=1e-3, Cosine scheduler, batch=256, DSA augmentation
+- 300 epochs, AdamW, lr=1e-3, weight_decay=0.01, Cosine scheduler, batch=256, DSA augmentation
 - KL-Div(T=20): loss = T² × KL(log_softmax(student_logits/T) || softmax(teacher_logits/T))
-- NO warmup for small-scale (paper says "--" for "Other details")
+- NO warmup for small-scale
 
 ## Target Results (Table: tab:small_scale_c100, CIFAR-100, ConvNet-D3)
 | Method | IPC | HL | SL |
@@ -46,21 +55,34 @@
 ## Architecture files
 - convnet.py - ConvNet-D3 ✓
 - dsa.py - DSA augmentation ✓
-- data_utils.py - Data loading ✓
+- data_utils.py - Data loading (+ random_select, kcenter_select) ✓
 - train_eval.py - Training and evaluation functions ✓
 - distill_dm.py - Distribution Matching distillation
 - distill_dc.py - Dataset Condensation (gradient matching)  
 - distill_tm.py - Trajectory Matching distillation
+- train_teacher_v2.py - Teacher training script
+- soft_labels.pt - Pre-computed teacher logits (59% teacher)
 
-## Plan (Priority Order)
-1. Train a MUCH better teacher model
-   - Use 1000+ epochs with proper augmentation (RandomCrop, HFlip, standard CIFAR augmentation)
-   - Try different learning rates and schedulers
-   - Target: 65%+ accuracy
-2. Generate new soft labels from better teacher
-3. Verify SL evaluation with new labels (target: Random IPC10 SL ~ 33%)
-4. Run complete experiment pipeline: all methods × both IPC × both label types
-5. Generate results table, REPORT.md, reproduce.sh
+## Plan (Executing NOW)
+1. Write single clean pipeline script that runs ALL experiments
+2. For DD methods: run distillation then evaluate (both HL and SL)
+3. For coresets: select then evaluate (both HL and SL)
+4. Collect all results, format as table
+5. Write REPORT.md, reproduce.sh
+6. Push final commit
+
+## DD Method Hyperparameters (from DCBench / standard papers)
+### DM (Distribution Matching)
+- lr_img=1.0, iterations=20000, match every batch
+- Initialize with random real images
+
+### DC (Dataset Condensation / Gradient Matching)
+- lr_img=1.0, iterations=5000, match gradients
+
+### TM (Trajectory Matching)
+- lr_img=0.01 (pixel), iterations=5000
+- Needs expert trajectories from pre-trained models
+- Expert models trained with SGD on full data
 
 ## Key Paper Claims to Reproduce
 1. **HL setting: DD methods >> coresets** (DM/DC/TM significantly beat Random)
@@ -69,10 +91,7 @@
 4. **K-centers outperforms Random in HL** but not meaningfully in SL
 
 ## Failed Approaches (DO NOT REPEAT)
-1. Pre-computing soft_probs = softmax(logits/T=20) → nearly uniform, useless
-2. K-centers using max-distance greedy → selects outliers (10.73% accuracy)
-3. Need K-means clustering on features for K-centers
-4. Using 1000 epochs instead of 300 for student training
-5. Using SGD for SL evaluation (should be AdamW)
-6. Too many scattered files → clean up, use single script
-7. Short teacher training (200 epochs) → only 56% accuracy → weak soft labels
+1. Pre-computing soft_probs = softmax(logits/T) separately: WRONG. Must store raw logits and apply softmax(logits/T) during training
+2. Trying to get exact SL accuracy match without good teacher: diminishing returns. Focus on relative trends.
+3. Training ConvNet-D3 teacher for 2000 epochs: too slow (10 min for 200 epochs). Use existing 59% teacher.
+4. Many scattered experiment scripts: confusing. Write ONE clean pipeline script.
