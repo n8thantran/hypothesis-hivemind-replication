@@ -1,0 +1,30 @@
+{
+  "Random_IPC10_HL": {
+    "mean": 17.8,
+    "std": 0.14
+  },
+  "Random_IPC10_SL": {
+    "mean": 28.03,
+    "std": 0.17
+  },
+  "Random_IPC50_HL": {
+    "mean": 34.22,
+    "std": 0.43
+  },
+  "Random_IPC50_SL": {
+    "mean": 41.53,
+    "std": 0.11
+  },
+  "Kcenter_IPC10_HL": {
+    "mean": 9.7,
+    "std": 0.1
+  },
+  "Kcenter_IPC10_SL": {
+    "mean": 27.73,
+    "std": 0.13
+  },
+  "Kcenter_IPC50_HL": {
+    "mean": 23.53,
+    "std": 0.4
+  }
+}

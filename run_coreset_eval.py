@@ -23,7 +23,7 @@ def feature_kcenters(train_images, train_labels, num_classes, ipc, device='cuda'
     teacher_path = '/workspace/teacher_final.pt'
     if os.path.exists(teacher_path):
         model = ConvNet(num_classes=num_classes, channel=3, im_size=(32, 32)).to(device)
-        model.load_state_dict(torch.load(teacher_path, map_location=device))
+        ckpt = torch.load(teacher_path, map_location=device); model.load_state_dict(ckpt["state_dict"] if "state_dict" in ckpt else ckpt)
         model.eval()
     else:
         model = ConvNet(num_classes=num_classes, channel=3, im_size=(32, 32)).to(device)
