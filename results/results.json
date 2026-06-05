@@ -93,5 +93,128 @@
     "ipc": 50,
     "label_type": "soft",
     "time": 143.4186954498291
+  },
+  "dm_ipc10_hard": {
+    "mean": 17.56,
+    "std": 0.0,
+    "runs": [
+      17.56
+    ],
+    "method": "dm",
+    "ipc": 10,
+    "label_type": "hard",
+    "time": 23.25937271118164
+  },
+  "dm_ipc10_soft": {
+    "mean": 27.96,
+    "std": 0.0,
+    "runs": [
+      27.96
+    ],
+    "method": "dm",
+    "ipc": 10,
+    "label_type": "soft",
+    "time": 27.482329845428467
+  },
+  "dm_ipc50_hard": {
+    "mean": 34.46,
+    "std": 0.0,
+    "runs": [
+      34.46
+    ],
+    "method": "dm",
+    "ipc": 50,
+    "label_type": "hard",
+    "time": 99.91390228271484
+  },
+  "dm_ipc50_soft": {
+    "mean": 41.09,
+    "std": 0.0,
+    "runs": [
+      41.09
+    ],
+    "method": "dm",
+    "ipc": 50,
+    "label_type": "soft"
+  },
+  "dc_ipc10_hard": {
+    "mean": 16.27,
+    "std": 0.0,
+    "runs": [
+      16.27
+    ],
+    "method": "dc",
+    "ipc": 10,
+    "label_type": "hard"
+  },
+  "dc_ipc10_soft": {
+    "mean": 15.24,
+    "std": 0.0,
+    "runs": [
+      15.24
+    ],
+    "method": "dc",
+    "ipc": 10,
+    "label_type": "soft"
+  },
+  "dc_ipc50_hard": {
+    "mean": 29.68,
+    "std": 0.0,
+    "runs": [
+      29.68
+    ],
+    "method": "dc",
+    "ipc": 50,
+    "label_type": "hard"
+  },
+  "dc_ipc50_soft": {
+    "mean": 37.61,
+    "std": 0.0,
+    "runs": [
+      37.61
+    ],
+    "method": "dc",
+    "ipc": 50,
+    "label_type": "soft"
+  },
+  "tm_ipc10_hard": {
+    "mean": 17.36,
+    "std": 0.0,
+    "runs": [
+      17.36
+    ],
+    "method": "tm",
+    "ipc": 10,
+    "label_type": "hard"
+  },
+  "tm_ipc10_soft": {
+    "mean": 28.7,
+    "std": 0.0,
+    "runs": [
+      28.7
+    ],
+    "method": "tm",
+    "ipc": 10,
+    "label_type": "soft"
+  },
+  "tm_ipc50_hard": {
+    "mean": 34.35,
+    "std": 0.0,
+    "runs": [
+      34.35
+    ],
+    "method": "tm",
+    "ipc": 50,
+    "label_type": "hard"
+  },
+  "tm_ipc50_soft": {
+    "mean": 40.9,
+    "std": 0.0,
+    "runs": [
+      40.9
+    ],
+    "method": "tm",
+    "ipc": 50,
+    "label_type": "soft"
   }
 }
