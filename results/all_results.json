@@ -1,306 +1,59 @@
 {
-  "table3": {
+  "table4": {
     "GPT-5.2": {
-      "precision": 0.94,
-      "recall": 0.75,
-      "f1": 0.83,
-      "value_accuracy": 0.71,
-      "n_evaluated": 150,
-      "n_errors": 0,
-      "raw_counts": {
-        "tp": 169,
-        "fp": 10,
-        "fn": 57
-      },
-      "per_type": {
-        "conditional_count": {
-          "va": 0.84,
-          "n": 21
-        },
-        "unknown": {
-          "va": 0,
-          "n": 0
-        },
-        "basic_retrieval": {
-          "va": 1.0,
-          "n": 20
-        },
-        "time_window": {
-          "va": 0.35,
-          "n": 17
-        },
-        "period_comparison": {
-          "va": 1.0,
-          "n": 12
-        },
-        "trend": {
-          "va": 0.0,
-          "n": 21
-        },
-        "feature_range": {
-          "va": 1.0,
-          "n": 19
-        },
-        "excursion": {
-          "va": 0,
-          "n": 16
-        },
-        "multi_day_average": {
-          "va": 0.98,
-          "n": 22
-        }
-      }
+      "accuracy": 0.81,
+      "precision": 0.97,
+      "recall": 0.79,
+      "f1": 0.87,
+      "tp": 122,
+      "fp": 4,
+      "tn": 41,
+      "fn": 33,
+      "n_evaluated": 200
     },
     "GPT-5-Mini": {
-      "precision": 0.87,
-      "recall": 0.63,
-      "f1": 0.73,
-      "value_accuracy": 0.68,
-      "n_evaluated": 150,
-      "n_errors": 0,
-      "raw_counts": {
-        "tp": 138,
-        "fp": 20,
-        "fn": 82
-      },
-      "per_type": {
-        "conditional_count": {
-          "va": 0.71,
-          "n": 21
-        },
-        "unknown": {
-          "va": 0,
-          "n": 0
-        },
-        "trend": {
-          "va": 0.0,
-          "n": 22
-        },
-        "period_comparison": {
-          "va": 1.0,
-          "n": 10
-        },
-        "time_window": {
-          "va": 0.53,
-          "n": 15
-        },
-        "basic_retrieval": {
-          "va": 1.0,
-          "n": 19
-        },
-        "feature_range": {
-          "va": 0.78,
-          "n": 16
-        },
-        "excursion": {
-          "va": 0,
-          "n": 24
-        },
-        "multi_day_average": {
-          "va": 1.0,
-          "n": 22
-        }
-      }
+      "accuracy": 0.85,
+      "precision": 0.98,
+      "recall": 0.82,
+      "f1": 0.89,
+      "tp": 121,
+      "fp": 2,
+      "tn": 50,
+      "fn": 27,
+      "n_evaluated": 200
     },
     "Gemini 3.0 Pro": {
-      "precision": 0.97,
-      "recall": 0.57,
-      "f1": 0.72,
-      "value_accuracy": 0.73,
-      "n_evaluated": 150,
-      "n_errors": 0,
-      "raw_counts": {
-        "tp": 131,
-        "fp": 4,
-        "fn": 97
-      },
-      "per_type": {
-        "conditional_count": {
-          "va": 0.8,
-          "n": 20
-        },
-        "unknown": {
-          "va": 0,
-          "n": 0
-        },
-        "trend": {
-          "va": 0.0,
-          "n": 17
-        },
-        "time_window": {
-          "va": 0.17,
-          "n": 15
-        },
-        "basic_retrieval": {
-          "va": 1.0,
-          "n": 24
-        },
-        "period_comparison": {
-          "va": 1.0,
-          "n": 15
-        },
-        "feature_range": {
-          "va": 0.97,
-          "n": 16
-        },
-        "excursion": {
-          "va": 0,
-          "n": 15
-        },
-        "multi_day_average": {
-          "va": 0.91,
-          "n": 22
-        }
-      }
+      "accuracy": 0.92,
+      "precision": 0.94,
+      "recall": 0.94,
+      "f1": 0.94,
+      "tp": 132,
+      "fp": 9,
+      "tn": 51,
+      "fn": 8,
+      "n_evaluated": 200
     },
     "Gemini 3.0 Flash": {
-      "precision": 0.99,
-      "recall": 0.6,
-      "f1": 0.75,
-      "value_accuracy": 0.75,
-      "n_evaluated": 150,
-      "n_errors": 0,
-      "raw_counts": {
-        "tp": 135,
-        "fp": 1,
-        "fn": 89
-      },
-      "per_type": {
-        "conditional_count": {
-          "va": 0.91,
-          "n": 15
-        },
-        "unknown": {
-          "va": 0,
-          "n": 0
-        },
-        "basic_retrieval": {
-          "va": 1.0,
-          "n": 24
-        },
-        "trend": {
-          "va": 0.0,
-          "n": 17
-        },
-        "period_comparison": {
-          "va": 1.0,
-          "n": 20
-        },
-        "time_window": {
-          "va": 0.3,
-          "n": 20
-        },
-        "feature_range": {
-          "va": 1.0,
-          "n": 10
-        },
-        "excursion": {
-          "va": 0,
-          "n": 15
-        },
-        "multi_day_average": {
-          "va": 0.93,
-          "n": 25
-        }
-      }
+      "accuracy": 0.88,
+      "precision": 0.9,
+      "recall": 0.93,
+      "f1": 0.92,
+      "tp": 133,
+      "fp": 14,
+      "tn": 43,
+      "fn": 10,
+      "n_evaluated": 200
     },
     "Llama-4-17B": {
-      "precision": 0.85,
-      "recall": 0.6,
-      "f1": 0.7,
-      "value_accuracy": 0.48,
-      "n_evaluated": 150,
-      "n_errors": 0,
-      "raw_counts": {
-        "tp": 132,
-        "fp": 23,
-        "fn": 89
-      },
-      "per_type": {
-        "conditional_count": {
-          "va": 0.31,
-          "n": 14
-        },
-        "unknown": {
-          "va": 0,
-          "n": 0
-        },
-        "basic_retrieval": {
-          "va": 1.0,
-          "n": 12
-        },
-        "period_comparison": {
-          "va": 0.97,
-          "n": 17
-        },
-        "trend": {
-          "va": 0.0,
-          "n": 18
-        },
-        "time_window": {
-          "va": 0.28,
-          "n": 25
-        },
-        "feature_range": {
-          "va": 0.41,
-          "n": 17
-        },
-        "excursion": {
-          "va": 0,
-          "n": 24
-        },
-        "multi_day_average": {
-          "va": 0.66,
-          "n": 22
-        }
-      }
-    },
-    "Nemotron-Nano-9B": {
-      "precision": 0.89,
-      "recall": 0.63,
-      "f1": 0.74,
-      "value_accuracy": 0.53,
-      "n_evaluated": 150,
-      "n_errors": 0,
-      "raw_counts": {
-        "tp": 140,
-        "fp": 18,
-        "fn": 81
-      },
-      "per_type": {
-        "conditional_count": {
-          "va": 0.44,
-          "n": 16
-        },
-        "trend": {
-          "va": 0.0,
-          "n": 24
-        },
-        "time_window": {
-          "va": 0.18,
-          "n": 17
-        },
-        "basic_retrieval": {
-          "va": 1.0,
-          "n": 19
-        },
-        "period_comparison": {
-          "va": 0.91,
-          "n": 22
-        },
-        "feature_range": {
-          "va": 0.42,
-          "n": 12
-        },
-        "excursion": {
-          "va": 0,
-          "n": 19
-        },
-        "multi_day_average": {
-          "va": 0.76,
-          "n": 21
-        }
-      }
+      "accuracy": 0.84,
+      "precision": 0.94,
+      "recall": 0.82,
+      "f1": 0.88,
+      "tp": 112,
+      "fp": 7,
+      "tn": 57,
+      "fn": 24,
+      "n_evaluated": 200
     }
   }
 }
