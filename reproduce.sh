@@ -105,9 +105,9 @@ echo "  DC IPC=10..."
 python -c "
 import torch
 from data_utils import get_cifar100_tensors
-from distill_dc import dataset_condensation
+from distill_dc import gradient_matching
 train_images, train_labels, _, _ = get_cifar100_tensors()
-syn_img, syn_lbl = dataset_condensation(train_images, train_labels, num_classes=100, ipc=10, device='cuda', outer_loops=5, inner_loops=10, lr_img=1.0)
+syn_img, syn_lbl = gradient_matching(train_images, train_labels, num_classes=100, ipc=10, device='cuda', outer_loops=5, inner_loops=10, lr_img=1.0)
 torch.save({'images': syn_img, 'labels': syn_lbl}, 'distilled_dc_ipc10.pt')
 print(f'  Saved: {syn_img.shape}')
 "
@@ -117,9 +117,9 @@ echo "  DC IPC=50..."
 python -c "
 import torch
 from data_utils import get_cifar100_tensors
-from distill_dc import dataset_condensation
+from distill_dc import gradient_matching
 train_images, train_labels, _, _ = get_cifar100_tensors()
-syn_img, syn_lbl = dataset_condensation(train_images, train_labels, num_classes=100, ipc=50, device='cuda', outer_loops=5, inner_loops=10, lr_img=1.0)
+syn_img, syn_lbl = gradient_matching(train_images, train_labels, num_classes=100, ipc=50, device='cuda', outer_loops=5, inner_loops=10, lr_img=1.0)
 torch.save({'images': syn_img, 'labels': syn_lbl}, 'distilled_dc_ipc50.pt')
 print(f'  Saved: {syn_img.shape}')
 "
