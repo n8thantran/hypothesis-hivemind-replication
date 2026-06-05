@@ -1,3 +1,7 @@
 data/
 __pycache__/
 *.pyc
+*.pt
+expert_trajectories/
+expert_trajectories_test/
+cifar100_tensors.pt
