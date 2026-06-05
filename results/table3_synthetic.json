@@ -1,0 +1,98 @@
+{
+  "GPT-5.2": {
+    "precision": 0.9,
+    "recall": 0.83,
+    "f1": 0.86,
+    "value_accuracy": 0.42,
+    "date_extraction_accuracy": 0.84,
+    "n_evaluated": 100,
+    "n_errors": 0,
+    "raw_counts": {
+      "tp": 118,
+      "fp": 13,
+      "fn": 24,
+      "val_matches": 642,
+      "val_total": 1542
+    }
+  },
+  "GPT-5-Mini": {
+    "precision": 0.81,
+    "recall": 0.63,
+    "f1": 0.71,
+    "value_accuracy": 0.42,
+    "date_extraction_accuracy": 0.99,
+    "n_evaluated": 100,
+    "n_errors": 0,
+    "raw_counts": {
+      "tp": 87,
+      "fp": 20,
+      "fn": 52,
+      "val_matches": 753,
+      "val_total": 1782
+    }
+  },
+  "Gemini 3.0 Pro": {
+    "precision": 0.99,
+    "recall": 0.61,
+    "f1": 0.75,
+    "value_accuracy": 0.44,
+    "date_extraction_accuracy": 0.92,
+    "n_evaluated": 100,
+    "n_errors": 0,
+    "raw_counts": {
+      "tp": 89,
+      "fp": 1,
+      "fn": 57,
+      "val_matches": 557,
+      "val_total": 1258
+    }
+  },
+  "Gemini 3.0 Flash": {
+    "precision": 0.99,
+    "recall": 0.63,
+    "f1": 0.77,
+    "value_accuracy": 0.39,
+    "date_extraction_accuracy": 1.0,
+    "n_evaluated": 100,
+    "n_errors": 0,
+    "raw_counts": {
+      "tp": 92,
+      "fp": 1,
+      "fn": 55,
+      "val_matches": 711,
+      "val_total": 1824
+    }
+  },
+  "Llama-4-17B": {
+    "precision": 0.89,
+    "recall": 0.66,
+    "f1": 0.76,
+    "value_accuracy": 0.44,
+    "date_extraction_accuracy": 0.99,
+    "n_evaluated": 100,
+    "n_errors": 0,
+    "raw_counts": {
+      "tp": 93,
+      "fp": 11,
+      "fn": 48,
+      "val_matches": 886,
+      "val_total": 1999
+    }
+  },
+  "Nemotron-Nano-9B": {
+    "precision": 0.8,
+    "recall": 0.61,
+    "f1": 0.69,
+    "value_accuracy": 0.37,
+    "date_extraction_accuracy": 0.81,
+    "n_evaluated": 100,
+    "n_errors": 0,
+    "raw_counts": {
+      "tp": 85,
+      "fp": 21,
+      "fn": 55,
+      "val_matches": 818,
+      "val_total": 2202
+    }
+  }
+}
