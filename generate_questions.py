@@ -5,6 +5,7 @@ Ground truth is computed deterministically using the CGM toolkit.
 """
 
 import json
+import re
 import random
 import numpy as np
 import pandas as pd
@@ -75,7 +76,13 @@ def compute_ground_truth(df, dates, features, sampling_rate, query_type, params=
                 return gt
             all_features = extract_features_json(filtered, sampling_rate)
             condition = params.get('condition', 'hypo_events == 0')
-            count_result = count_satisfied_condition(all_features, condition)
+            # Parse condition string: "feature_name operator threshold"
+            cond_match = re.match(r'(\w+)\s*(>=|<=|==|>|<)\s*([\d.]+)', condition)
+            if cond_match:
+                feat_name, op, thresh = cond_match.groups()
+                count_result = count_satisfied_condition(all_features, feat_name, op, float(thresh))
+            else:
+                return gt
             key = f"({dates_str[0]}, {dates_str[-1]})"
             gt[key] = count_result
             

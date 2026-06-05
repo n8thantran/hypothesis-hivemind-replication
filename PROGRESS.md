@@ -1,14 +1,14 @@
 # CGM-Agent Replication Progress
 
-## Current Phase: Fix VA computation, then run all remaining tables (3-7)
+## Current Phase: Fix VA computation + conditional_count GT, then run all tables
 
 ## Implementation Plan
-- [x] 1. Process CGM data for all 19 subjects (AZT1D + ShanghaiT2DM) - DONE
-- [x] 2. Implement CGM analytical toolkit (all 12+ functions) - DONE in cgm_toolkit.py
-- [x] 3. Generate synthetic QA pairs with ground truth - DONE (4180 pairs matching Table 1)
-- [x] 4. Implement 3-layer agent pipeline + evaluation code - DONE in run_evaluation_v2.py
-- [x] 5. Run agent on synthetic queries (Table 3 initial) - DONE (F1 good, VA=0.37-0.44 too low)
-- [ ] 5b. Fix value accuracy computation → re-run Table 3 - IN PROGRESS
+- [x] 1. Process CGM data for all 19 subjects (AZT1D + ShanghaiT2DM)
+- [x] 2. Implement CGM analytical toolkit (all 12+ functions) - cgm_toolkit.py
+- [x] 3. Generate synthetic QA pairs with ground truth - generate_questions.py (4180 pairs)
+- [x] 4. Implement 3-layer agent pipeline + evaluation code - run_evaluation_v2.py
+- [x] 5. Run agent on synthetic queries (Table 3 initial) - F1 good, VA=0.37-0.44 too low
+- [ ] 5b. Fix VA computation + regenerate conditional_count GTs → re-run Table 3
 - [ ] 6. Run Table 4 (Layer 1 feasibility classification)
 - [ ] 7. Run Table 5 (Real-world Layer 2)
 - [ ] 8. Run Table 6 (Readability analysis)
@@ -16,25 +16,31 @@
 - [x] 10. Table 8 (TIR correlation) - DONE (deterministic)
 - [ ] 11. Create reproduce.sh and REPORT.md
 
-## Value Accuracy Bug Analysis (CRITICAL)
-Root cause identified: When toolkit runs with same dates, values match 100%.
-The VA issue is in key matching:
-1. For multi_day_average/feature_range/conditional_count: GT key is "(2024-02-05, 2024-02-07)" 
-   - This tuple key doesn't match date regex \d{4}-\d{2}-\d{2}
-   - If LLM predicts different date range, tuple key changes entirely
-2. For trend/basic_retrieval: GT has date keys like "2024-02-05"
-   - If LLM predicts same dates, values match perfectly
-   - Overlapping-date logic works but many dates may not overlap
-3. For empty features (570/2179 queries): ALL 18+ features compared
-   - This is correct since toolkit returns all features
+## CRITICAL BUGS FIXED (but not yet tested)
+### Bug 1: conditional_count GT generation
+- File: generate_questions.py line 78
+- OLD: `count_satisfied_condition(all_features, condition)` - wrong signature
+- NEW: Parse condition string with regex, call `count_satisfied_condition(all_features, feat_name, op, float(thresh))`
+- Result: 285 conditional_count queries had error GTs; now should work
+- STATUS: Fixed in code, need to regenerate QA dataset
 
-FIX STRATEGY: 
-- For tuple-keyed results (multi_day_average etc): Compare values regardless of key name
-  since there's only one result dict. Just flatten all values and compare by feature name.
-- For date-keyed results: Keep overlapping-date logic but be more flexible on key matching
-- Key insight: If function call is correct AND dates overlap, VA should be ~100%
+### Bug 2: Value Accuracy computation
+- File: run_evaluation_v2.py, compute_value_accuracy()
+- Problem: For tuple-keyed results (multi_day_average, feature_range, conditional_count), 
+  the GT key is like "(2024-02-05, 2024-02-07)" and agent key may differ
+- Current code only matches by exact key or same-prefix feature name
+- FIX NEEDED: When top-level keys are NOT date-format, match by feature name only
+  (flatten all values and compare features regardless of parent key)
+- STATUS: NOT YET FIXED - need to update compute_value_accuracy()
 
-## Paper Table Values (for reference)
+## Value Accuracy Fix Strategy
+In compute_value_accuracy:
+1. Detect if results are "date-keyed" (keys match YYYY-MM-DD) vs "range-keyed" (tuple/other)
+2. For date-keyed: keep overlapping-date logic (works well)
+3. For range-keyed (or single result dict): match by feature name only, ignoring parent key
+4. This should bring VA from ~0.40 to ~0.80+ since toolkit is deterministic
+
+## Paper Table Target Values
 ### Table 3 (Synthetic, N=2470)
 | Model | Prec | Rec | F1 | ValAcc |
 |-------|------|-----|-----|--------|
@@ -49,58 +55,37 @@ FIX STRATEGY:
 | Model | Acc | Prec | Rec | F1 |
 |-------|-----|------|-----|-----|
 | GPT-5.2 | 0.92 | 0.90 | 1.00 | 0.94 |
-| GPT-5-Mini | 0.91 | 0.90 | 0.97 | 0.94 |
 | Gemini Pro | 0.96 | 0.95 | 1.00 | 0.97 |
-| Gemini Flash | 0.95 | 0.93 | 1.00 | 0.96 |
-| Llama-4-17B | 0.86 | 0.87 | 0.95 | 0.91 |
 
 ### Table 5 (Real-world Layer 2, N=1197)
-| Model | Prec | Rec | F1 | ValAcc |
-|-------|------|-----|-----|--------|
-| GPT-5.2 | 0.65 | 0.76 | 0.70 | 0.82 |
-| GPT-5-Mini | 0.56 | 0.68 | 0.62 | 0.86 |
-| Gemini Pro | 0.65 | 0.62 | 0.64 | 0.88 |
-| Gemini Flash | 0.65 | 0.58 | 0.61 | 0.86 |
-| Llama-4-17B | 0.44 | 0.66 | 0.53 | 0.44 |
+Lower F1 than synthetic (0.56-0.70), higher VA (0.82-0.88)
 
 ### Table 6 (Readability)
-Avg Length: 108 words, FRE: 60.3, FK Grade: 9.7
+Avg length ~108 words, Flesch ~60.3, FK grade ~9.7
 
-### Table 7 (Ablation, Gemini Pro, N=1197)
-Full Pipeline: F1=0.64, VA=0.88
-w/o Input Processor: F1=0.45, VA=0.82
+### Table 7 (Ablation)
+Full pipeline F1 ~0.63, No-L1 F1 ~0.47 (big drop)
 
-### Table 8 (TIR Correlation)
-Overall: TIR vs F1 r=0.385 p=0.104, TIR vs VA r=0.095 p=0.699
-T1D: r=0.358 p=0.280, r=-0.044 p=0.898
-T2D: r=0.622 p=0.100, r=0.181 p=0.667
+### Table 8 (TIR Correlation) - DONE
+No significant correlation between TIR and agent performance
 
-## Key Files
-- cgm_toolkit.py: All 12+ analytical functions (616 lines), SubjectData class
-- load_subjects.py: Loads all 19 subjects, verified working
-- generate_questions.py: QA generation, VERIFIED (4180 questions)
-- run_evaluation_v2.py: Full evaluation (Tables 3-8), ~1170 lines
-- results/qa_dataset.json: Full QA dataset
-- results/subject_summaries.json: Subject metadata
-- results/table3_synthetic.json: Table 3 initial results
-- results/table8_tir_correlation.json: Table 8 results
+## File Structure
+- load_subjects.py - Load 19 CGM subjects from data/
+- cgm_toolkit.py - All CGM analytical functions (12+)
+- generate_questions.py - Generate 4180 QA pairs (FIXED conditional_count)
+- run_evaluation_v2.py - Main evaluation: Tables 3-8 (VA FIX NEEDED)
+- results/qa_dataset.json - 4180 QA pairs (needs regeneration for conditional_count fix)
+- results/table8_tir_correlation.json - Table 8 results
+- results/table3_synthetic.json - Table 3 initial (VA too low)
 
-## Available LLM APIs (via OpenRouter)
-- openai/gpt-4o (proxy for GPT-5.2) - VERIFIED
-- openai/gpt-4o-mini (proxy for GPT-5-Mini) - VERIFIED
-- google/gemini-2.5-flash (proxy for Gemini 3.0 Flash AND Pro) - VERIFIED
-- meta-llama/llama-3.1-8b-instruct (proxy for Llama-4-17B AND Nemotron-9B) - VERIFIED
+## Failed Approaches
+1. Initial VA computation used exact key matching - failed for tuple keys
+2. Prefix-based matching still fails when date ranges differ between GT and agent
+3. conditional_count GT generation was broken due to wrong function signature
 
-## SubjectData attributes
-- .df: DataFrame with columns 'Date' (timestamp) and 'CGM' (glucose value)
-- .sampling_rate: int (5 or 15)
-- .subject_id, .dataset, .dates, .date_strings
-- .get_features(dates): compute features for given dates
-- .get_tir(): overall TIR
-
-## API Details
-- Base URL: https://openrouter.ai/api/v1
-- API Key: In environment variable OPENROUTER_API_KEY
-- All models accessible via OpenAI-compatible API
-
-## Git: Push to origin/master (not main)
+## Next Steps (Priority Order)
+1. Fix compute_value_accuracy() in run_evaluation_v2.py
+2. Regenerate QA dataset (python3 generate_questions.py)
+3. Run Table 3 with fixed VA (python3 run_evaluation_v2.py 3)
+4. Run Tables 4,5,6,7 (python3 run_evaluation_v2.py 4 5 6 7)
+5. Create reproduce.sh and REPORT.md
