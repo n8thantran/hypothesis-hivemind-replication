@@ -10,18 +10,16 @@ import numpy as np
 
 def DiffAugment(x, strategy='color_crop_cutout_flip_scale_rotate', seed=-1, param=None):
     """Apply DSA augmentations."""
-    if seed == -1:
-        param.batchmode = False
-    else:
-        param.batchmode = True
-    
-    if strategy == 'None' or strategy == '':
+    if strategy == 'None' or strategy == '' or strategy is None:
         return x
     
     if param is None:
         param = ParamDiffAug()
     
-    if seed != -1:
+    if seed == -1:
+        param.batchmode = False
+    else:
+        param.batchmode = True
         torch.manual_seed(seed)
         np.random.seed(seed)
     
@@ -157,6 +155,5 @@ AUGMENT_FNS = {
 
 if __name__ == '__main__':
     x = torch.randn(4, 3, 32, 32).cuda()
-    param = ParamDiffAug()
-    y = DiffAugment(x, strategy='color_crop_cutout_flip_scale_rotate', param=param)
+    y = DiffAugment(x, strategy='color_crop_cutout_flip_scale_rotate')
     print(f"DSA input: {x.shape}, output: {y.shape}")
