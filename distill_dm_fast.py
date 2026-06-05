@@ -1,9 +1,6 @@
 """
-Fast Distribution Matching (DM) - optimized for speed.
-Key optimizations:
-- Reuse network for multiple iterations before re-sampling
-- Smaller batch sizes
-- No DSA during distillation (optional)
+Fast Distribution Matching (DM) with correct loss formulation.
+Uses batched processing for speed while maintaining DCBench-style sum loss.
 """
 import torch
 import torch.nn as nn
@@ -17,11 +14,11 @@ from data_utils import get_class_indices
 def distribution_matching_fast(train_images, train_labels, num_classes=100, ipc=10,
                                channel=3, im_size=(32, 32), device='cuda',
                                iterations=5000, lr_img=1.0, batch_real=64,
-                               net_reuse=10,
+                               net_reuse=1,
                                dsa_strategy='color_crop_cutout_flip_scale_rotate',
                                seed=0):
     """
-    Fast DM: reuse networks for multiple iterations.
+    DM with batched computation and sum-based loss.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -43,61 +40,50 @@ def distribution_matching_fast(train_images, train_labels, num_classes=100, ipc=
     
     optimizer_img = torch.optim.SGD([syn_images], lr=lr_img, momentum=0.5)
     
-    # Pre-organize real images by class on CPU
-    real_by_class = []
+    # Pre-organize real images by class on GPU (for small datasets, fits in memory)
+    real_by_class_gpu = []
     for c in range(num_classes):
-        real_by_class.append(train_images[class_indices[c]])
+        real_by_class_gpu.append(train_images[class_indices[c]].to(device))
     
-    print(f"DM Fast: Synthesizing {num_classes * ipc} images ({ipc} per class), {iterations} iters...")
+    print(f"DM: Synthesizing {num_classes * ipc} images ({ipc}/class), {iterations} iters...")
     
     net = None
     for it in range(iterations):
-        # Sample a new random network every net_reuse iterations
+        # Sample a new random network each iteration
         if it % net_reuse == 0:
             net = ConvNet(num_classes=num_classes, channel=channel, im_size=im_size).to(device)
             net.eval()
         
-        # Sample real images for each class
-        real_samples = []
-        batch_per_class = batch_real
+        # Sample real images: batch_real per class
+        real_batch_list = []
         for c in range(num_classes):
-            n = len(real_by_class[c])
-            perm = torch.randperm(n)[:batch_per_class]
-            real_samples.append(real_by_class[c][perm])
+            n = real_by_class_gpu[c].shape[0]
+            perm = torch.randperm(n, device=device)[:batch_real]
+            real_batch_list.append(real_by_class_gpu[c][perm])
         
-        all_real = torch.cat(real_samples, dim=0).to(device)
+        all_real = torch.cat(real_batch_list, dim=0)
         all_real_aug = DiffAugment(all_real, strategy=dsa_strategy)
         
         with torch.no_grad():
             all_real_feat = net.embed(all_real_aug)
         
-        # Compute mean features per class for real data
-        real_mean_feats = []
-        offset = 0
-        for c in range(num_classes):
-            real_mean_feats.append(all_real_feat[offset:offset+batch_per_class].mean(0))
-            offset += batch_per_class
-        real_mean_feats = torch.stack(real_mean_feats)
-        
-        # Forward pass on all synthetic images
+        # All synthetic
         all_syn_aug = DiffAugment(syn_images, strategy=dsa_strategy)
         all_syn_feat = net.embed(all_syn_aug)
         
-        # Compute mean features per class for synthetic data
-        syn_mean_feats = []
+        # Compute per-class mean features and sum of squared differences
+        loss = torch.tensor(0.0, device=device)
         for c in range(num_classes):
+            real_mean = all_real_feat[c*batch_real:(c+1)*batch_real].mean(0)
             syn_mask = syn_labels == c
-            syn_mean_feats.append(all_syn_feat[syn_mask].mean(0))
-        syn_mean_feats = torch.stack(syn_mean_feats)
-        
-        # Loss: MSE between mean features
-        loss = torch.mean((real_mean_feats - syn_mean_feats) ** 2)
+            syn_mean = all_syn_feat[syn_mask].mean(0)
+            loss += torch.sum((real_mean - syn_mean) ** 2)
         
         optimizer_img.zero_grad()
         loss.backward()
         optimizer_img.step()
         
         if (it + 1) % 500 == 0:
-            print(f"  Iter {it+1}/{iterations}, Loss: {loss.item():.6f}")
+            print(f"  Iter {it+1}/{iterations}, Loss: {loss.item():.4f}")
     
     return syn_images.detach().cpu(), syn_labels.cpu()
