@@ -1,0 +1,14 @@
+{
+  "random_ipc10_hl": {
+    "method": "random",
+    "ipc": 10,
+    "setting": "hl",
+    "mean": 17.39,
+    "std": 0.24,
+    "accs": [
+      17.61,
+      17.06,
+      17.51
+    ]
+  }
+}
