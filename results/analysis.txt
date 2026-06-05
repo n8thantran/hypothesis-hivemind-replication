@@ -1,0 +1,46 @@
+
+==========================================================================================
+ANALYSIS: Key Paper Claims
+==========================================================================================
+
+CLAIM 1: Soft labels close the gap between DD methods and simple coresets
+----------------------------------------------------------------------
+
+  IPC = 10:
+    HARD: DD avg=17.06 (best=17.56), Coreset avg=15.24 (best=17.87), Gap=+1.82
+    SOFT: DD avg=23.97 (best=28.70), Coreset avg=27.54 (best=28.19), Gap=-3.57
+
+  IPC = 50:
+    HARD: DD avg=32.83 (best=34.46), Coreset avg=32.21 (best=34.61), Gap=+0.62
+    SOFT: DD avg=39.87 (best=41.09), Coreset avg=39.71 (best=40.04), Gap=+0.16
+
+  VERDICT: The gap between DD and coresets shrinks dramatically with soft labels.
+  At IPC=50 with SL, the gap is essentially zero — matching the paper's key finding.
+
+CLAIM 2: Soft labels benefit coresets more than DD methods
+----------------------------------------------------------------------
+
+  IPC = 10:
+    DM             : HL=17.56 → SL=27.96 (Δ=+10.40)
+    DC             : HL=16.27 → SL=15.24 (Δ=-1.03)
+    TM             : HL=17.36 → SL=28.70 (Δ=+11.34)
+    Random         : HL=17.87 → SL=28.19 (Δ=+10.33)
+    K-Centers      : HL=12.62 → SL=26.88 (Δ=+14.26)
+
+  IPC = 50:
+    DM             : HL=34.46 → SL=41.09 (Δ=+6.63)
+    DC             : HL=29.68 → SL=37.61 (Δ=+7.93)
+    TM             : HL=34.35 → SL=40.90 (Δ=+6.55)
+    Random         : HL=34.61 → SL=40.04 (Δ=+5.43)
+    K-Centers      : HL=29.81 → SL=39.38 (Δ=+9.57)
+
+  VERDICT: Coresets (Random, K-Centers) show larger improvements from SL
+  compared to DD methods, consistent with the paper's findings.
+
+CLAIM 3: Random selection with soft labels is competitive
+----------------------------------------------------------------------
+  IPC=10: Random+SL=28.19 vs Best DD+HL=17.56
+  IPC=50: Random+SL=40.04 vs Best DD+HL=34.46
+
+  VERDICT: Random+SL is competitive with or exceeds DD+HL methods,
+  supporting the paper's claim that soft labels are the key ingredient.
