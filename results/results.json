@@ -1,0 +1,86 @@
+{
+  "random_ipc10_hard": {
+    "mean": 17.866666666666664,
+    "std": 0.15107025591499476,
+    "runs": [
+      17.77,
+      17.75,
+      18.08
+    ],
+    "method": "random",
+    "ipc": 10,
+    "label_type": "hard"
+  },
+  "random_ipc10_soft": {
+    "mean": 28.19333333333334,
+    "std": 0.282410261066335,
+    "runs": [
+      27.89,
+      28.12,
+      28.57
+    ],
+    "method": "random",
+    "ipc": 10,
+    "label_type": "soft"
+  },
+  "random_ipc50_hard": {
+    "mean": 34.60999999999999,
+    "std": 0.4042276586281555,
+    "runs": [
+      34.62,
+      34.11,
+      35.1
+    ],
+    "method": "random",
+    "ipc": 50,
+    "label_type": "hard"
+  },
+  "random_ipc50_soft": {
+    "mean": 40.03666666666667,
+    "std": 0.0618241233033044,
+    "runs": [
+      40.07,
+      40.09,
+      39.95
+    ],
+    "method": "random",
+    "ipc": 50,
+    "label_type": "soft"
+  },
+  "k_centers_ipc10_hard": {
+    "mean": 12.623333333333333,
+    "std": 0.1347425528760509,
+    "runs": [
+      12.79,
+      12.46,
+      12.62
+    ],
+    "method": "k_centers",
+    "ipc": 10,
+    "label_type": "hard"
+  },
+  "k_centers_ipc10_soft": {
+    "mean": 26.88,
+    "std": 0.2933712096758409,
+    "runs": [
+      27.29,
+      26.62,
+      26.73
+    ],
+    "method": "k_centers",
+    "ipc": 10,
+    "label_type": "soft"
+  },
+  "k_centers_ipc50_hard": {
+    "mean": 29.810000000000002,
+    "std": 0.37211109452241103,
+    "runs": [
+      29.78,
+      30.28,
+      29.37
+    ],
+    "method": "k_centers",
+    "ipc": 50,
+    "label_type": "hard"
+  }
+}

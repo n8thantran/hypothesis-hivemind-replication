@@ -1,0 +1,50 @@
+/usr/local/lib/python3.14/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading CIFAR-100...
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Processing train split...
+Processing test split...
+Generating soft labels (1 teacher(s), 100 epochs)...
+  Training teacher 1/1...
+    Epoch 50: train acc = 100.0%
+    Epoch 100: train acc = 100.0%
+Soft labels saved to /workspace/soft_labels.pt
+
+============================================================
+Running: random_ipc10_hard
+============================================================
+
+  --- Run 1/3 ---
+  random_ipc10_hard run 1: 17.77%
+
+  --- Run 2/3 ---
+  random_ipc10_hard run 2: 17.75%
+
+  --- Run 3/3 ---
+  random_ipc10_hard run 3: 18.08%
+
+>>> random_ipc10_hard: 17.87 ± 0.15%
+
+============================================================
+Running: random_ipc10_soft
+============================================================
+
+  --- Run 1/3 ---
+  random_ipc10_soft run 1: 27.89%
+
+  --- Run 2/3 ---
+  random_ipc10_soft run 2: 28.12%
+
+  --- Run 3/3 ---
+  random_ipc10_soft run 3: 28.57%
+
+>>> random_ipc10_soft: 28.19 ± 0.28%
+
+============================================================
+Running: random_ipc50_hard
+============================================================
+
+  --- Run 1/3 ---
+  random_ipc50_hard run 1: 34.39%
+
+  --- Run 2/3 ---
