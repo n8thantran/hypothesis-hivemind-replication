@@ -1,0 +1,90 @@
+/usr/local/lib/python3.14/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+============================================================
+FINAL EVALUATION PIPELINE
+Runs per experiment: 1
+============================================================
+
+Loading CIFAR-100...
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Processing train split...
+Processing test split...
+Full soft labels: torch.Size([50000, 100])
+Teacher accuracy: 59.19%
+
+============================================================
+Evaluating DM IPC=10
+============================================================
+  Data: torch.Size([1000, 3, 32, 32]), Labels: torch.Size([1000]), SL: torch.Size([1000, 100])
+
+  --- HL Run 1/1 ---
+  Epoch 100/300, Acc: 14.49%
+  Epoch 200/300, Acc: 17.34%
+  Epoch 300/300, Acc: 17.48%
+  HL accuracy: 17.48%
+
+  --- SL Run 1/1 ---
+  Epoch 100/300, Acc: 14.87%
+  Epoch 200/300, Acc: 17.41%
+  Epoch 300/300, Acc: 18.69%
+  SL accuracy: 18.69%
+
+============================================================
+Evaluating DM IPC=50
+============================================================
+  Data: torch.Size([5000, 3, 32, 32]), Labels: torch.Size([5000]), SL: torch.Size([5000, 100])
+
+  --- HL Run 1/1 ---
+  Epoch 100/300, Acc: 29.95%
+  Epoch 200/300, Acc: 33.89%
+  Epoch 300/300, Acc: 34.14%
+  HL accuracy: 34.14%
+
+  --- SL Run 1/1 ---
+  Epoch 100/300, Acc: 22.72%
+  Epoch 200/300, Acc: 30.42%
+  Epoch 300/300, Acc: 29.61%
+  SL accuracy: 29.61%
+
+============================================================
+Evaluating DC IPC=10
+============================================================
+  Data: torch.Size([1000, 3, 32, 32]), Labels: torch.Size([1000]), SL: torch.Size([1000, 100])
+
+  --- HL Run 1/1 ---
+  Epoch 100/300, Acc: 13.10%
+  Epoch 200/300, Acc: 15.62%
+  Epoch 300/300, Acc: 16.09%
+  HL accuracy: 16.09%
+
+  --- SL Run 1/1 ---
+  Epoch 100/300, Acc: 6.79%
+  Epoch 200/300, Acc: 7.87%
+  Epoch 300/300, Acc: 8.64%
+  SL accuracy: 8.64%
+
+============================================================
+Evaluating DC IPC=50
+============================================================
+  Data: torch.Size([5000, 3, 32, 32]), Labels: torch.Size([5000]), SL: torch.Size([5000, 100])
+
+  --- HL Run 1/1 ---
+  Epoch 100/300, Acc: 26.37%
+  Epoch 200/300, Acc: 29.10%
+  Epoch 300/300, Acc: 30.10%
+  HL accuracy: 30.10%
+
+  --- SL Run 1/1 ---
+  Epoch 100/300, Acc: 20.02%
+  Epoch 200/300, Acc: 27.40%
+  Epoch 300/300, Acc: 26.76%
+  SL accuracy: 26.76%
+
+============================================================
+Evaluating TM IPC=10
+============================================================
+  Data: torch.Size([1000, 3, 32, 32]), Labels: torch.Size([1000]), SL: torch.Size([1000, 100])
+
+  --- HL Run 1/1 ---
+  Epoch 100/300, Acc: 13.81%
+  Epoch 200/300, Acc: 17.39%

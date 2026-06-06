@@ -1,0 +1,58 @@
+{
+  "dm_ipc10": {
+    "method": "DM",
+    "ipc": 10,
+    "hl_mean": 17.48,
+    "hl_std": 0.0,
+    "hl_accs": [
+      17.48
+    ],
+    "sl_mean": 18.69,
+    "sl_std": 0.0,
+    "sl_accs": [
+      18.69
+    ]
+  },
+  "dm_ipc50": {
+    "method": "DM",
+    "ipc": 50,
+    "hl_mean": 34.14,
+    "hl_std": 0.0,
+    "hl_accs": [
+      34.14
+    ],
+    "sl_mean": 29.61,
+    "sl_std": 0.0,
+    "sl_accs": [
+      29.61
+    ]
+  },
+  "dc_ipc10": {
+    "method": "DC",
+    "ipc": 10,
+    "hl_mean": 16.09,
+    "hl_std": 0.0,
+    "hl_accs": [
+      16.09
+    ],
+    "sl_mean": 8.64,
+    "sl_std": 0.0,
+    "sl_accs": [
+      8.64
+    ]
+  },
+  "dc_ipc50": {
+    "method": "DC",
+    "ipc": 50,
+    "hl_mean": 30.1,
+    "hl_std": 0.0,
+    "hl_accs": [
+      30.1
+    ],
+    "sl_mean": 26.76,
+    "sl_std": 0.0,
+    "sl_accs": [
+      26.76
+    ]
+  }
+}
