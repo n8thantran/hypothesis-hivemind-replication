@@ -4,32 +4,36 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**EXECUTION** - Downloading DCBench distilled datasets, then running evaluations
+**EXECUTION** - Writing unified evaluation script, then running all experiments
 
-## Status Summary (Checkpoint Turn 2525)
+## Status Summary (Checkpoint Turn 2550)
 ### What's Done
 - ✅ ConvNet-D3 architecture (convnet.py) - tested, correct
 - ✅ DSA augmentation (dsa.py) - tested, correct  
 - ✅ Teacher model trained: 59.19% accuracy (teacher.pt)
 - ✅ Soft labels generated for full training set (soft_labels.pt, shape [50000,100], raw logits)
-- ✅ Some distilled datasets created via own code
-- ✅ Clean run_experiments.py and run_single.py written
+- ✅ DCBench distilled datasets downloaded for CIFAR-100:
+  - DC IPC10/50, DM IPC10/50, DSA IPC10/50, TM IPC10/50, Random IPC10/50, K-centers IPC10/50
+  - All stored in dcbench_data/data/condensed/
+  - All pre-normalized (mean≈0, std≈1), no additional normalization needed
 - ✅ Verified HL Random IPC10 ≈ 18.64% (matches paper exactly)
 
 ### What's NOT Done
-- [ ] Download DCBench distilled datasets (paper says they use these!)
-- [ ] Run full evaluation with DCBench data
+- [ ] Write unified evaluation script for DCBench data
+- [ ] Generate soft labels for DCBench distilled datasets using teacher
+- [ ] Run all 20 experiments (5 methods × 2 IPCs × 2 label types)
 - [ ] Generate results table
 - [ ] Write reproduce.sh
 - [ ] Write REPORT.md
 - [ ] Final commit
 
-### CRITICAL INSIGHT (Turn 2525)
-Paper line 1235: "We adopt the standard setup provided by DCBench for our evaluation."
-This means the paper uses PRE-DISTILLED datasets from DCBench, NOT their own distillation.
-Google Drive link: https://drive.google.com/drive/folders/1trp0MyUoL9QrbsdQ8w7TxgoXcMJecoyH
-My own distillation was producing low-quality results (DM IPC10 = 17.5% vs paper 29.23%)
-because distillation requires much longer runs than my 10min timeout allows.
+## DCBench Data Format
+- DC/DM/DSA: `res_{method}_CIFAR100_ConvNet_{ipc}ipc.pt` → dict with 'data' key → data[0][0]=images, data[0][1]=labels
+- TM: `IPC{ipc}/images_best.pt` and `IPC{ipc}/labels_best.pt` → direct tensors
+- Random: `CIFAR100_IPC{ipc}_normalize_images.pt` and `CIFAR100_IPC{ipc}_normalize_labels.pt`
+- K-centers: `CIFAR100_IPC{ipc}_images.pt` and `CIFAR100_IPC{ipc}_labels.pt`
+- All images are [N, 3, 32, 32] float32, already channel-normalized
+- Labels are integer class indices
 
 ## Target Table: tab:small_scale_c100 (CIFAR-100, ConvNet-D3)
 | Method | IPC | HL | SL |
@@ -45,13 +49,7 @@ because distillation requires much longer runs than my 10min timeout allows.
 | K-centers | 10 | 25.04±0.30 | 34.70±0.27 |
 | K-centers | 50 | 38.64±0.43 | 46.24±0.12 |
 
-## Key Paper Claims to Demonstrate
-1. In HL: DD methods (especially TM) >> coresets (clear gap)
-2. In SL: gap narrows substantially - coresets competitive with DD
-3. TM is the best DD method in both settings
-4. K-centers > Random in HL, but similar in SL
-
-## Evaluation Hyperparameters (EXACT from paper, Table: tab:stage3_hyper)
+## Evaluation Hyperparameters (EXACT from paper)
 ### HL Setting (Small-scale)
 - 300 epochs, SGD, lr=0.01, momentum=0.9, weight_decay=5e-4
 - StepLR@epoch151 (gamma=0.1), batch=256, DSA augmentation, CE loss
@@ -60,38 +58,22 @@ because distillation requires much longer runs than my 10min timeout allows.
 - 300 epochs, AdamW, lr=1e-3, weight_decay=0.01, Cosine scheduler
 - batch=256, DSA augmentation, KL-Div(T=20), NO warmup
 
-## Known Issues / Observations
-- SL numbers ~5% lower than paper for Random/K-centers (28% vs 33%)
-  - Likely due to teacher quality: our ConvNet teacher = 59.19%, paper may use stronger teacher
-  - Tried many variations: different T (3,5,10,15,20), different WD, different loss formulations
-  - All give ~28% for Random IPC10 SL. This is a teacher quality issue, not a bug.
-  - The RELATIVE trends should still hold (this is what matters for the paper's claims)
-- HL numbers match well: Random IPC10 = 18.64% (paper: 18.64±0.25)
-- ResNet-18 teacher training attempted but timed out (10min limit)
+## Key Paper Claims to Demonstrate
+1. In HL: DD methods (especially TM) >> coresets (clear gap)
+2. In SL: gap narrows substantially - coresets competitive with DD
+3. TM is the best DD method in both settings
+4. K-centers > Random in HL, but similar in SL
 
-## Failed Approaches
-- Tried training ResNet-18 teacher for better soft labels - timed out
-- Tried different KD formulations (CE soft, combined CE+KL) - no significant improvement
-- Tried different temperatures (3,5,10,15,20) - all similar (~28% for Random IPC10 SL)
-- Tried different weight decays (0, 0.001, 0.01, 0.1) - all similar
-- Own DM/DC/TM distillation: too slow (needs hours, 10min timeout), produced poor results
-
-## Plan for Remaining Turns
-1. Download DCBench distilled datasets from Google Drive
-2. Prepare DCBench data into format for evaluation
-3. Run evaluations for all 20 experiments (5 methods × 2 IPCs × 2 label types)
-4. Collect results, format table
-5. Write reproduce.sh and REPORT.md
-6. Final commit and push
+## Known Issues
+- SL numbers may be ~5% lower than paper due to teacher quality (59.19% vs possibly higher)
+- DSA is not in paper's Table 1 (paper uses DC, DM, TM, Random, K-centers)
+- The RELATIVE trends should still hold
 
 ## Key Files
 - /workspace/convnet.py - ConvNet-D3 architecture
 - /workspace/dsa.py - DSA augmentation
 - /workspace/data_utils.py - Data loading utilities
 - /workspace/train_eval.py - Training/evaluation functions
-- /workspace/distill_dm.py - Distribution Matching distillation
-- /workspace/distill_dc.py - Dataset Condensation (gradient matching)
-- /workspace/distill_tm.py - Trajectory Matching distillation
-- /workspace/run_experiments.py - Main experiment pipeline
 - /workspace/teacher.pt - Trained teacher model (59.19%)
 - /workspace/soft_labels.pt - Full training set soft labels
+- /workspace/dcbench_data/ - Downloaded DCBench distilled datasets
