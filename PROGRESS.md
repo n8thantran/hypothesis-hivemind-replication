@@ -6,7 +6,7 @@
 ## Current Phase
 **EXECUTION** - Running all 20 experiments, then generating final table
 
-## Status Summary (Checkpoint Turn 2625)
+## Status Summary (Checkpoint Turn 2675)
 
 ### What's Done
 - ✅ ConvNet-D3 architecture (convnet.py) - tested, correct
@@ -67,18 +67,18 @@
 
 ## Key Paper Claims to Demonstrate
 1. In HL: DD methods (especially TM) >> coresets (clear gap)
-2. In SL: gap narrows substantially - coresets competitive with DD
-3. TM is the best DD method in both settings
-4. K-centers > Random in HL, but similar in SL
-
-## Known Issues
-- Teacher is 59.19% which may differ slightly from paper's teacher
-- DSA augmentation implementation matches standard DCBench/DD practice
+2. In SL: gap narrows substantially; coresets competitive with DD methods
+3. Random baseline improves dramatically with soft labels
+4. K-centers competitive with DD methods under SL
 
 ## Key Files
 - convnet.py: ConvNet-D3 architecture
 - dsa.py: DSA augmentation
-- evaluate_all.py: Unified evaluation script for all methods
-- teacher.pt: Trained teacher model (59.19% acc)
-- soft_labels.pt: Teacher logits for full CIFAR-100 train set
-- dcbench_data/: Downloaded DCBench distilled datasets
+- evaluate_all.py: Unified evaluation for all methods
+- teacher.pt: Trained teacher model (59.19% accuracy)
+- dcbench_data/: DCBench distilled datasets
+
+## Failed Approaches
+- Training own distilled datasets (DC, DM, TM) from scratch: too slow, quality issues
+- Using torchvision pretrained models as teacher: wrong architecture, paper uses ConvNet-D3
+- Multiple teacher training attempts before getting stable 59% accuracy
