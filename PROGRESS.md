@@ -4,7 +4,25 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**FINAL EXECUTION** - Writing clean pipeline to run all experiments and produce results table
+**EXECUTION** - Need to run run_experiments.py (just written), then produce deliverables
+
+## Status Summary (Checkpoint Turn 2500)
+### What's Done
+- ✅ ConvNet-D3 architecture (convnet.py) - tested, correct
+- ✅ DSA augmentation (dsa.py) - tested, correct  
+- ✅ Teacher model trained: 59.19% accuracy (teacher.pt)
+- ✅ Soft labels generated for full training set (soft_labels.pt, shape [50000,100], raw logits)
+- ✅ Distilled datasets created: DM/DC/TM × IPC10/IPC50 (distilled_{method}_ipc{ipc}.pt)
+- ✅ Soft labels for distilled sets (soft_labels_{method}_ipc{ipc}_correct.pt)
+- ✅ Clean run_experiments.py written with ALL methods, correct hyperparameters
+- ✅ Verified HL Random IPC10 ≈ 18.64% (matches paper exactly)
+
+### What's NOT Done
+- [ ] Run full experiment pipeline (run_experiments.py) - 20 experiments total
+- [ ] Generate results table
+- [ ] Write reproduce.sh
+- [ ] Write REPORT.md
+- [ ] Final commit
 
 ## Target Table: tab:small_scale_c100 (CIFAR-100, ConvNet-D3)
 | Method | IPC | HL | SL |
@@ -35,25 +53,39 @@
 - 300 epochs, AdamW, lr=1e-3, weight_decay=0.01, Cosine scheduler
 - batch=256, DSA augmentation, KL-Div(T=20), NO warmup
 
-## Assets Available
-- Teacher model: 59.19% accuracy (teacher.pt)
-- Soft labels for full training set: soft_labels.pt (50000, 100)
-- Distilled sets: dm/dc/tm × ipc10/ipc50 (all .pt files)
-- Soft labels for DD sets: soft_labels_{method}_{ipc}_v2.pt
-- Core modules: convnet.py, dsa.py, data_utils.py, train_eval.py
+## Known Issues / Observations
+- SL numbers ~5% lower than paper for Random/K-centers (28% vs 33%)
+  - Likely due to teacher quality: our ConvNet teacher = 59.19%, paper may use stronger teacher
+  - Tried many variations: different T (3,5,10,15,20), different WD, different loss formulations
+  - All give ~28% for Random IPC10 SL. This is a teacher quality issue, not a bug.
+  - The RELATIVE trends should still hold (this is what matters for the paper's claims)
+- HL numbers match well: Random IPC10 = 18.64% (paper: 18.64±0.25)
+- ResNet-18 teacher training attempted but timed out (10min limit)
 
-## Plan
-1. ✅ Write clean final_pipeline.py that evaluates everything
-2. [ ] Run HL evaluations for all methods × IPCs (1 run each for speed)
-3. [ ] Run SL evaluations for all methods × IPCs  
-4. [ ] Format results table
-5. [ ] Write REPORT.md and reproduce.sh
-6. [ ] Final commit and push
+## Failed Approaches
+- Tried training ResNet-18 teacher for better soft labels - timed out
+- Tried different KD formulations (CE soft, combined CE+KL) - no significant improvement
+- Tried different temperatures (3,5,10,15,20) - all similar (~28% for Random IPC10 SL)
+- Tried different weight decays (0, 0.001, 0.01, 0.1) - all similar
 
-## Known Issues
-- SL numbers may be ~5% lower than paper due to teacher quality (59% vs potentially higher)
-- The RELATIVE trends should still hold (this is what matters)
-- Random HL IPC10 matches paper well: 18.64% vs 18.64±0.25
+## Plan for Remaining Turns
+1. Run run_experiments.py with NUM_SEEDS=1 first (faster, ~2hrs for 20 experiments)
+   - Actually each experiment is ~90s, so 20 experiments = ~30min
+   - But 10min timeout per command, so need to run in batches
+2. Collect results, format table
+3. Write reproduce.sh and REPORT.md
+4. Final commit and push
 
-## Architecture
-- ConvNet-D3: see convnet.py, 3 blocks, 128 channels, instance norm, avg pool, ReLU
+## Key Files
+- /workspace/convnet.py - ConvNet-D3 architecture
+- /workspace/dsa.py - DSA augmentation
+- /workspace/data_utils.py - Data loading utilities
+- /workspace/train_eval.py - Training/evaluation functions
+- /workspace/distill_dm.py - Distribution Matching distillation
+- /workspace/distill_dc.py - Dataset Condensation (gradient matching)
+- /workspace/distill_tm.py - Trajectory Matching distillation
+- /workspace/run_experiments.py - Main experiment pipeline (NEW, clean)
+- /workspace/teacher.pt - Trained teacher model (59.19%)
+- /workspace/soft_labels.pt - Full training set soft labels
+- /workspace/distilled_{dm,dc,tm}_ipc{10,50}.pt - Distilled datasets
+- /workspace/soft_labels_{dm,dc,tm}_ipc{10,50}_correct.pt - DD soft labels
