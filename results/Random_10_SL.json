@@ -1,0 +1,10 @@
+{
+  "method": "Random",
+  "ipc": 10,
+  "label_type": "SL",
+  "accs": [
+    19.47
+  ],
+  "mean": 19.47,
+  "std": 0.0
+}

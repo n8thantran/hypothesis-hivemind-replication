@@ -1,0 +1,10 @@
+{
+  "method": "Random",
+  "ipc": 10,
+  "label_type": "HL",
+  "accs": [
+    18.73
+  ],
+  "mean": 18.73,
+  "std": 0.0
+}

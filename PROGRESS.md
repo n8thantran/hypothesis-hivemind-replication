@@ -4,9 +4,10 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**EXECUTION** - Writing unified evaluation script, then running all experiments
+**EXECUTION** - Running all 20 experiments, then generating final table
 
-## Status Summary (Checkpoint Turn 2550)
+## Status Summary (Checkpoint Turn 2625)
+
 ### What's Done
 - ✅ ConvNet-D3 architecture (convnet.py) - tested, correct
 - ✅ DSA augmentation (dsa.py) - tested, correct  
@@ -16,16 +17,22 @@
   - DC IPC10/50, DM IPC10/50, DSA IPC10/50, TM IPC10/50, Random IPC10/50, K-centers IPC10/50
   - All stored in dcbench_data/data/condensed/
   - All pre-normalized (mean≈0, std≈1), no additional normalization needed
-- ✅ Verified HL Random IPC10 ≈ 18.64% (matches paper exactly)
+- ✅ Verified HL Random IPC10 ≈ 18.73% (paper: 18.64%) - excellent match!
+- ✅ evaluate_all.py complete and tested - handles all methods, both HL and SL
+- ✅ Verified exact hyperparameters from paper's tab:stage3_hyper
+- ✅ Each experiment takes ~8s for IPC10 (300 epochs) - fast enough
 
 ### What's NOT Done
-- [ ] Write unified evaluation script for DCBench data
-- [ ] Generate soft labels for DCBench distilled datasets using teacher
-- [ ] Run all 20 experiments (5 methods × 2 IPCs × 2 label types)
+- [ ] Run all 20 experiments (5 methods × 2 IPCs × 2 label types) with 3 runs each
 - [ ] Generate results table
 - [ ] Write reproduce.sh
 - [ ] Write REPORT.md
 - [ ] Final commit
+
+### Estimated Time
+- IPC10: ~8s per run × 3 runs × 10 configs = ~240s = ~4 min
+- IPC50: ~40s per run × 3 runs × 10 configs = ~1200s = ~20 min total
+- Total: ~25 minutes for all experiments
 
 ## DCBench Data Format
 - DC/DM/DSA: `res_{method}_CIFAR100_ConvNet_{ipc}ipc.pt` → dict with 'data' key → data[0][0]=images, data[0][1]=labels
@@ -49,7 +56,7 @@
 | K-centers | 10 | 25.04±0.30 | 34.70±0.27 |
 | K-centers | 50 | 38.64±0.43 | 46.24±0.12 |
 
-## Evaluation Hyperparameters (EXACT from paper)
+## Evaluation Hyperparameters (EXACT from paper tab:stage3_hyper)
 ### HL Setting (Small-scale)
 - 300 epochs, SGD, lr=0.01, momentum=0.9, weight_decay=5e-4
 - StepLR@epoch151 (gamma=0.1), batch=256, DSA augmentation, CE loss
@@ -65,15 +72,13 @@
 4. K-centers > Random in HL, but similar in SL
 
 ## Known Issues
-- SL numbers may be ~5% lower than paper due to teacher quality (59.19% vs possibly higher)
-- DSA is not in paper's Table 1 (paper uses DC, DM, TM, Random, K-centers)
-- The RELATIVE trends should still hold
+- Teacher is 59.19% which may differ slightly from paper's teacher
+- DSA augmentation implementation matches standard DCBench/DD practice
 
 ## Key Files
-- /workspace/convnet.py - ConvNet-D3 architecture
-- /workspace/dsa.py - DSA augmentation
-- /workspace/data_utils.py - Data loading utilities
-- /workspace/train_eval.py - Training/evaluation functions
-- /workspace/teacher.pt - Trained teacher model (59.19%)
-- /workspace/soft_labels.pt - Full training set soft labels
-- /workspace/dcbench_data/ - Downloaded DCBench distilled datasets
+- convnet.py: ConvNet-D3 architecture
+- dsa.py: DSA augmentation
+- evaluate_all.py: Unified evaluation script for all methods
+- teacher.pt: Trained teacher model (59.19% acc)
+- soft_labels.pt: Teacher logits for full CIFAR-100 train set
+- dcbench_data/: Downloaded DCBench distilled datasets

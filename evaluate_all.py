@@ -72,11 +72,21 @@ def load_test_data():
     return testloader
 
 
+def load_teacher(teacher_path='teacher.pt', device='cuda'):
+    """Load teacher model from checkpoint."""
+    teacher = get_convnet_d3(num_classes=100).to(device)
+    checkpoint = torch.load(teacher_path, map_location=device, weights_only=False)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        teacher.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        teacher.load_state_dict(checkpoint)
+    teacher.eval()
+    return teacher
+
+
 def generate_soft_labels(images, labels, teacher_path='teacher.pt', device='cuda'):
     """Generate soft labels for distilled images using teacher model."""
-    teacher = get_convnet_d3(num_classes=100).to(device)
-    teacher.load_state_dict(torch.load(teacher_path, map_location=device, weights_only=True))
-    teacher.eval()
+    teacher = load_teacher(teacher_path, device)
     
     all_logits = []
     with torch.no_grad():
@@ -131,9 +141,7 @@ def train_hl(images, labels, testloader, device='cuda', seed=0):
     for epoch in range(300):
         model.train()
         # Shuffle
-        perm = torch.randperm(n)
-        epoch_loss = 0
-        n_batches = 0
+        perm = torch.randperm(n, device=device)
         
         for i in range(0, n, batch_size):
             idx = perm[i:i+batch_size]
@@ -148,9 +156,6 @@ def train_hl(images, labels, testloader, device='cuda', seed=0):
             loss = criterion(out, y)
             loss.backward()
             optimizer.step()
-            
-            epoch_loss += loss.item()
-            n_batches += 1
         
         scheduler.step()
     
@@ -172,7 +177,6 @@ def train_sl(images, labels, soft_labels, testloader, device='cuda', seed=0, tem
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=300)
     
     images_gpu = images.to(device)
-    labels_gpu = labels.to(device)  # Hard labels (for reference)
     soft_labels_gpu = soft_labels.to(device)  # Teacher logits
     
     n = len(images)
@@ -181,7 +185,7 @@ def train_sl(images, labels, soft_labels, testloader, device='cuda', seed=0, tem
     
     for epoch in range(300):
         model.train()
-        perm = torch.randperm(n)
+        perm = torch.randperm(n, device=device)
         
         for i in range(0, n, batch_size):
             idx = perm[i:i+batch_size]
@@ -195,8 +199,6 @@ def train_sl(images, labels, soft_labels, testloader, device='cuda', seed=0, tem
             out = model(x)
             
             # KL divergence with temperature scaling
-            # KL(teacher || student) = sum(p * log(p/q))
-            # Using PyTorch convention: KLDivLoss expects log-probs as input, probs as target
             log_student = F.log_softmax(out / T, dim=1)
             teacher_probs = F.softmax(sl / T, dim=1)
             loss = F.kl_div(log_student, teacher_probs, reduction='batchmean') * (T * T)
@@ -286,11 +288,11 @@ def run_all_experiments(num_runs=3, device='cuda'):
 
 def print_table(results):
     """Print results in table format matching paper."""
-    print("\n" + "="*70)
+    print("\n" + "="*80)
     print("Table 1: CIFAR-100, ConvNet-D3 Evaluation")
-    print("="*70)
-    print(f"{'Method':<12} {'IPC':>4} {'HL (Ours)':>14} {'HL (Paper)':>14} {'SL (Ours)':>14} {'SL (Paper)':>14}")
-    print("-"*70)
+    print("="*80)
+    print(f"{'Method':<12} {'IPC':>4} {'HL (Ours)':>14} {'HL (Paper)':>12} {'SL (Ours)':>14} {'SL (Paper)':>12}")
+    print("-"*80)
     
     # Paper values for comparison
     paper = {
@@ -322,9 +324,9 @@ def print_table(results):
             
             paper_hl, paper_sl = paper.get((method, ipc), (0, 0))
             
-            print(f"{method:<12} {ipc:>4} {hl_str:>14} {paper_hl:>10.2f}    {sl_str:>14} {paper_sl:>10.2f}")
+            print(f"{method:<12} {ipc:>4} {hl_str:>14} {paper_hl:>10.2f}   {sl_str:>14} {paper_sl:>10.2f}")
     
-    print("="*70)
+    print("="*80)
 
 
 if __name__ == '__main__':
