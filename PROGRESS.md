@@ -4,25 +4,32 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**EXECUTION** - Need to run run_experiments.py (just written), then produce deliverables
+**EXECUTION** - Downloading DCBench distilled datasets, then running evaluations
 
-## Status Summary (Checkpoint Turn 2500)
+## Status Summary (Checkpoint Turn 2525)
 ### What's Done
 - ✅ ConvNet-D3 architecture (convnet.py) - tested, correct
 - ✅ DSA augmentation (dsa.py) - tested, correct  
 - ✅ Teacher model trained: 59.19% accuracy (teacher.pt)
 - ✅ Soft labels generated for full training set (soft_labels.pt, shape [50000,100], raw logits)
-- ✅ Distilled datasets created: DM/DC/TM × IPC10/IPC50 (distilled_{method}_ipc{ipc}.pt)
-- ✅ Soft labels for distilled sets (soft_labels_{method}_ipc{ipc}_correct.pt)
-- ✅ Clean run_experiments.py written with ALL methods, correct hyperparameters
+- ✅ Some distilled datasets created via own code
+- ✅ Clean run_experiments.py and run_single.py written
 - ✅ Verified HL Random IPC10 ≈ 18.64% (matches paper exactly)
 
 ### What's NOT Done
-- [ ] Run full experiment pipeline (run_experiments.py) - 20 experiments total
+- [ ] Download DCBench distilled datasets (paper says they use these!)
+- [ ] Run full evaluation with DCBench data
 - [ ] Generate results table
 - [ ] Write reproduce.sh
 - [ ] Write REPORT.md
 - [ ] Final commit
+
+### CRITICAL INSIGHT (Turn 2525)
+Paper line 1235: "We adopt the standard setup provided by DCBench for our evaluation."
+This means the paper uses PRE-DISTILLED datasets from DCBench, NOT their own distillation.
+Google Drive link: https://drive.google.com/drive/folders/1trp0MyUoL9QrbsdQ8w7TxgoXcMJecoyH
+My own distillation was producing low-quality results (DM IPC10 = 17.5% vs paper 29.23%)
+because distillation requires much longer runs than my 10min timeout allows.
 
 ## Target Table: tab:small_scale_c100 (CIFAR-100, ConvNet-D3)
 | Method | IPC | HL | SL |
@@ -67,14 +74,15 @@
 - Tried different KD formulations (CE soft, combined CE+KL) - no significant improvement
 - Tried different temperatures (3,5,10,15,20) - all similar (~28% for Random IPC10 SL)
 - Tried different weight decays (0, 0.001, 0.01, 0.1) - all similar
+- Own DM/DC/TM distillation: too slow (needs hours, 10min timeout), produced poor results
 
 ## Plan for Remaining Turns
-1. Run run_experiments.py with NUM_SEEDS=1 first (faster, ~2hrs for 20 experiments)
-   - Actually each experiment is ~90s, so 20 experiments = ~30min
-   - But 10min timeout per command, so need to run in batches
-2. Collect results, format table
-3. Write reproduce.sh and REPORT.md
-4. Final commit and push
+1. Download DCBench distilled datasets from Google Drive
+2. Prepare DCBench data into format for evaluation
+3. Run evaluations for all 20 experiments (5 methods × 2 IPCs × 2 label types)
+4. Collect results, format table
+5. Write reproduce.sh and REPORT.md
+6. Final commit and push
 
 ## Key Files
 - /workspace/convnet.py - ConvNet-D3 architecture
@@ -84,8 +92,6 @@
 - /workspace/distill_dm.py - Distribution Matching distillation
 - /workspace/distill_dc.py - Dataset Condensation (gradient matching)
 - /workspace/distill_tm.py - Trajectory Matching distillation
-- /workspace/run_experiments.py - Main experiment pipeline (NEW, clean)
+- /workspace/run_experiments.py - Main experiment pipeline
 - /workspace/teacher.pt - Trained teacher model (59.19%)
 - /workspace/soft_labels.pt - Full training set soft labels
-- /workspace/distilled_{dm,dc,tm}_ipc{10,50}.pt - Distilled datasets
-- /workspace/soft_labels_{dm,dc,tm}_ipc{10,50}_correct.pt - DD soft labels
