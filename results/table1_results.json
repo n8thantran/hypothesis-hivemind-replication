@@ -358,5 +358,125 @@
     ],
     "mean": 40.34,
     "std": 0.23366642891095848
+  },
+  "DC_IPC10_SL_strong": {
+    "method": "DC",
+    "ipc": 10,
+    "label_type": "SL_strong",
+    "accs": [
+      4.89,
+      5.1,
+      4.94
+    ],
+    "mean": 4.98,
+    "std": 0.09
+  },
+  "DC_IPC50_SL_strong": {
+    "method": "DC",
+    "ipc": 50,
+    "label_type": "SL_strong",
+    "accs": [
+      7.17,
+      7.07,
+      7.2
+    ],
+    "mean": 7.15,
+    "std": 0.06
+  },
+  "DM_IPC10_SL_strong": {
+    "method": "DM",
+    "ipc": 10,
+    "label_type": "SL_strong",
+    "accs": [
+      6.27,
+      6.36,
+      6.29
+    ],
+    "mean": 6.31,
+    "std": 0.04
+  },
+  "DM_IPC50_SL_strong": {
+    "method": "DM",
+    "ipc": 50,
+    "label_type": "SL_strong",
+    "accs": [
+      31.69,
+      31.7,
+      31.18
+    ],
+    "mean": 31.52,
+    "std": 0.24
+  },
+  "TM_IPC10_SL_strong": {
+    "method": "TM",
+    "ipc": 10,
+    "label_type": "SL_strong",
+    "accs": [
+      19.3,
+      18.88,
+      19.07
+    ],
+    "mean": 19.08,
+    "std": 0.17
+  },
+  "TM_IPC50_SL_strong": {
+    "method": "TM",
+    "ipc": 50,
+    "label_type": "SL_strong",
+    "accs": [
+      37.19,
+      36.71,
+      37.42
+    ],
+    "mean": 37.11,
+    "std": 0.3
+  },
+  "Random_IPC10_SL_strong": {
+    "method": "Random",
+    "ipc": 10,
+    "label_type": "SL_strong",
+    "accs": [
+      23.05,
+      22.85,
+      22.72
+    ],
+    "mean": 22.87,
+    "std": 0.14
+  },
+  "Random_IPC50_SL_strong": {
+    "method": "Random",
+    "ipc": 50,
+    "label_type": "SL_strong",
+    "accs": [
+      38.18,
+      38.81,
+      39.03
+    ],
+    "mean": 38.67,
+    "std": 0.36
+  },
+  "K-centers_IPC10_SL_strong": {
+    "method": "K-centers",
+    "ipc": 10,
+    "label_type": "SL_strong",
+    "accs": [
+      28.12,
+      28.21,
+      28.12
+    ],
+    "mean": 28.15,
+    "std": 0.04
+  },
+  "K-centers_IPC50_SL_strong": {
+    "method": "K-centers",
+    "ipc": 50,
+    "label_type": "SL_strong",
+    "accs": [
+      41.09,
+      40.57,
+      40.34
+    ],
+    "mean": 40.67,
+    "std": 0.31
   }
 }
