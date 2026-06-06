@@ -23,3 +23,26 @@ Epoch 1200/2000 | Train: 62.73% | Test: 53.07% | LR: 0.034549
 Epoch 1300/2000 | Train: 64.76% | Test: 54.48% | LR: 0.027300
   -> New best: 54.48%
 Epoch 1400/2000 | Train: 67.26% | Test: 53.98% | LR: 0.020611
+Epoch 1500/2000 | Train: 70.62% | Test: 54.30% | LR: 0.014645
+Epoch 1600/2000 | Train: 74.20% | Test: 56.19% | LR: 0.009549
+  -> New best: 56.19%
+Epoch 1700/2000 | Train: 78.16% | Test: 55.75% | LR: 0.005450
+Epoch 1800/2000 | Train: 83.20% | Test: 57.73% | LR: 0.002447
+  -> New best: 57.73%
+Epoch 1900/2000 | Train: 88.61% | Test: 58.74% | LR: 0.000616
+  -> New best: 58.74%
+Epoch 2000/2000 | Train: 90.88% | Test: 59.24% | LR: 0.000000
+  -> New best: 59.24%
+
+Best test accuracy: 59.24%
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Processing train split...
+Processing test split...
+Traceback (most recent call last):
+  File "/workspace/train_teacher.py", line 153, in <module>
+    generate_soft_labels_from_teacher()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/train_teacher.py", line 130, in generate_soft_labels_from_teacher
+    correct += predicted.eq(labels).sum().item()
+               ~~~~~~~~~~~~^^^^^^^^
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!
