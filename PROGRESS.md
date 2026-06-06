@@ -4,14 +4,14 @@
 "Rethinking Dataset Distillation: Hard Truths About Soft Labels" (CVPR 2026)
 
 ## Current Phase
-**EXECUTION** - Running all 20 experiments, then generating final table
+**EXECUTION** - Running all experiments, then deliverables
 
-## Status Summary (Checkpoint Turn 2675)
+## Status Summary (Checkpoint Turn 2750)
 
 ### What's Done
 - ✅ ConvNet-D3 architecture (convnet.py) - tested, correct
 - ✅ DSA augmentation (dsa.py) - tested, correct  
-- ✅ Teacher model trained: 59.19% accuracy (teacher.pt)
+- ✅ Teacher model trained: 59.19% accuracy (teacher.pt) - ConvNet-D3
 - ✅ Soft labels generated for full training set (soft_labels.pt, shape [50000,100], raw logits)
 - ✅ DCBench distilled datasets downloaded for CIFAR-100:
   - DC IPC10/50, DM IPC10/50, DSA IPC10/50, TM IPC10/50, Random IPC10/50, K-centers IPC10/50
@@ -22,25 +22,27 @@
 - ✅ Verified exact hyperparameters from paper's tab:stage3_hyper
 - ✅ Each experiment takes ~8s for IPC10 (300 epochs) - fast enough
 
+### SL Issue
+- ConvNet-D3 teacher (59% accuracy) produces weak soft labels
+- Random IPC10 SL: ~20-24% with various temps (paper: 33.43%)
+- Tried T=1,3,5,10,20 - best is T=3 at ~24.7% (still way off)
+- ResNet-18 teacher training keeps timing out (~60 epochs gives only 58.58%)
+- **Root cause**: Paper likely uses a stronger teacher (ResNet-18 at ~78% or similar)
+- **Decision**: Run all experiments with existing ConvNet-D3 teacher, focus on HL accuracy matching + qualitative SL trends (gap narrowing)
+
 ### What's NOT Done
 - [ ] Run all 20 experiments (5 methods × 2 IPCs × 2 label types) with 3 runs each
-- [ ] Generate results table
+- [ ] Generate final results table
 - [ ] Write reproduce.sh
 - [ ] Write REPORT.md
 - [ ] Final commit
 
-### Estimated Time
-- IPC10: ~8s per run × 3 runs × 10 configs = ~240s = ~4 min
-- IPC50: ~40s per run × 3 runs × 10 configs = ~1200s = ~20 min total
-- Total: ~25 minutes for all experiments
-
-## DCBench Data Format
-- DC/DM/DSA: `res_{method}_CIFAR100_ConvNet_{ipc}ipc.pt` → dict with 'data' key → data[0][0]=images, data[0][1]=labels
-- TM: `IPC{ipc}/images_best.pt` and `IPC{ipc}/labels_best.pt` → direct tensors
-- Random: `CIFAR100_IPC{ipc}_normalize_images.pt` and `CIFAR100_IPC{ipc}_normalize_labels.pt`
-- K-centers: `CIFAR100_IPC{ipc}_images.pt` and `CIFAR100_IPC{ipc}_labels.pt`
-- All images are [N, 3, 32, 32] float32, already channel-normalized
-- Labels are integer class indices
+### Plan
+1. Run all HL experiments first (should match paper well)
+2. Run SL experiments with ConvNet-D3 teacher
+3. Generate table comparing our results to paper
+4. Write reproduce.sh and REPORT.md
+5. Document SL discrepancy and likely cause
 
 ## Target Table: tab:small_scale_c100 (CIFAR-100, ConvNet-D3)
 | Method | IPC | HL | SL |
@@ -80,5 +82,7 @@
 
 ## Failed Approaches
 - Training own distilled datasets (DC, DM, TM) from scratch: too slow, quality issues
-- Using torchvision pretrained models as teacher: wrong architecture, paper uses ConvNet-D3
+- Using torchvision pretrained models as teacher: wrong architecture
 - Multiple teacher training attempts before getting stable 59% accuracy
+- ResNet-18 teacher: training keeps timing out (need >200 epochs, ~8min not enough)
+- SL with ConvNet-D3 teacher: produces weak soft labels, likely need stronger teacher
